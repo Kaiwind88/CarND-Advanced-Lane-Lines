@@ -58,7 +58,7 @@ name(a, b, c)
 
 import numpy as np
 
-a = [[1, 1, 1, 1, 1], [2, 2, 2, 2, 2], [3, 3, 3, 3,3]]
+a = [[1, 2, 3, 2, 1], [2, 3, 4, 3, 2], [3, 4, 5, 4,3], [2,4,6]]
 
 print(np.nonzero(a))
 
@@ -83,13 +83,32 @@ print(y[good_left])
 from collections import deque
 
 q = deque(maxlen=10)
-
+q1 = deque(maxlen=10)
+q1.append(a[3])
 q.append(a[0])
 q.append(a[1])
 print(np.mean(q, axis=0, dtype=np.float32))
 
 q.append(a[2])
 print(np.mean(q, axis=0, dtype=np.float32))
+
+s1 = np.array(q)
+s2 = np.array([2,4,5])
+s2 = s2.reshape((-1, 1))
+print('s1', s1)
+print('s2', s2)
+s3 = s1*s2
+print(s3)
+m1 = np.sum(s3, axis=0)
+m2 = np.sum(s2)
+print('----')
+print(m1)
+print(m2)
+print(m1/m2)
+print('------')
+
+print(np.mean(s3, axis=0, dtype=np.float32))
+
 
 
 l = []
@@ -98,3 +117,39 @@ l.append([3,4,5])
 e = np.hstack(l)
 print(np.mean(e, axis=0, dtype=np.float32))
 
+a = np.array([])
+a = []
+b = np.array([1, 2, 3])
+b = [1,2,3]
+c = None
+print (a is None)
+print (a != None)
+print (b is None)
+print (b != None )
+print(b == [])
+print(a == [])
+print (a == b)
+print(c is None)
+print(c == [])
+b = np.zeros(5)
+print(b)
+c = [1,2,3]
+print(np.append(c, b))
+a = np.array([[1,2,3]])
+b = np.zeros([3, 3])
+print(a)
+print(b)
+print(np.append(a, b, axis=0))
+print(a)
+
+a = np.arange(12).reshape(3,4)
+print(a)
+print(a[:,:-1])
+
+q = deque(maxlen=10)
+for i in range(15):
+    q.append(i)
+print(q)
+
+a = [[1, 2, 3, 2, 1], [2, 3, 4, 3, 2], [3, 4, 5, 4,3], [2,4,6]]
+print(np.concatenate(a, axis=0))
