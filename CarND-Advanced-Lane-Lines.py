@@ -44,8 +44,8 @@ lane = Lane(MInv)
 w_name = 'image'
 cv2.namedWindow(w_name, cv2.WINDOW_AUTOSIZE)
 # cap = cv2.VideoCapture('project_video.mp4')
-cap = cv2.VideoCapture('challenge_video.mp4')
-# cap = cv2.VideoCapture('harder_challenge_video.mp4')
+# cap = cv2.VideoCapture('challenge_video.mp4')
+cap = cv2.VideoCapture('harder_challenge_video.mp4')
 # cap = cv2.VideoCapture('saveVideo.avi')
 
 def nothing(x):
@@ -59,10 +59,13 @@ while(cap.isOpened()):
 
     if parameters['p']:
         ret, frame = cap.read()
-        cv2.setTrackbarPos('Frame',w_name, int(cap.get(cv2.CAP_PROP_POS_FRAMES)))
+        frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        cv2.setTrackbarPos('Frame',w_name, frame_idx)
+        set_frame_idx(frame_idx)
+        parameters['frame'] = frame_idx
         if not ret:
             continue
-
+    print("--------current frame:", frame_idx)
     orig = frame
     # gray = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
     # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -72,7 +75,7 @@ while(cap.isOpened()):
 
 
     undist_img, wy_img, gray, color, combined, unwarp_img, edge, undist_img_enhance= pipline(orig, parameters)
-    scale = 0.4
+    scale = 0.3
 
     resize_shape = (int(orig.shape[1]*scale), int(orig.shape[0]*scale))
 

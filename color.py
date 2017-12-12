@@ -6,10 +6,10 @@ from enum import Enum
 import pickle
 import os.path
 import glob
+from preprocess import *
 
 
-
-images = glob.glob('./Capture2/*.jpg')
+images = glob.glob('./Capture7/*.jpg')
 img = plt.imread(images[0])
 mask = np.zeros(img.shape[:2], np.uint8)
 print(img.shape)
@@ -91,14 +91,23 @@ def otsu(img):
     # plot all the images and their histograms
     return th
 
-
-for img in images:
+load_data()
+mtx = parameters['mtx']
+dist = parameters['dist']
+M = parameters['M']
+MInv = parameters['MInv']
+nx = 9
+ny = 6
+for img in images[::30]:
     image = plt.imread(img)
     hls = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
+    M, MInv = transform(image, nx, ny, mtx, dist)
+    unwarp_img = unwarp(image,M,mtx,dist)
     s = hls[:,:,2]
-    otsu(s)
+    # otsu(s)
     # contrast = contrast(gray)
-    # plt.subplot(221), plt.imshow(image)
-    # plt.subplot(222), plt.imshow(contrast, 'gray')/
-    # plt.show()
+    plt.subplot(221), plt.imshow(image)
+    plt.subplot(222), plt.imshow(unwarp_img)
+    # plt.imshow(s, cmap='gray')
+    plt.show()
     # draw2(contrast)

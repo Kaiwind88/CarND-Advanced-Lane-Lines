@@ -10,7 +10,7 @@ from collections import deque
 
 # Define a class to receive the characteristics of each line detection
 class Line():
-    queue_len = 5
+    queue_len = 10
     def __init__(self, name):
         # was the line detected in the last iteration?
         self.detected = False
@@ -40,6 +40,8 @@ class Line():
         self.curvature_deque = deque(maxlen=self.queue_len)
         self.fit_deque = deque(maxlen=self.queue_len)
         self.n_x_deque = deque(maxlen=self.queue_len)       # weight
+        self.last_fit = None
+        self.last_fit_cnt = 0
 
 
     def is_detected(self):
@@ -68,7 +70,7 @@ class Line():
             # print(best_fit)
             # print('--------')
             # self.best_fit = best_fit
-            self.best_fit = np.mean(self.fit_deque, axis=0, dtype=np.float32)
+            # self.best_fit = np.mean(self.fit_deque, axis=0, dtype=np.float32)
             fits = np.array(self.fit_deque)
             sum_weight = 0
             sum_fit = [0, 0, 0]
@@ -77,6 +79,9 @@ class Line():
                 sum_fit += fit * (i+1)
             best_fit = sum_fit / sum_weight
             self.best_fit = best_fit
+        elif len(self.fit_deque) > 0:
+            mean_fit = np.mean(self.fit_deque, axis=0)
+            self.best_fit = self.current_fit * 0.8 + mean_fit * 0.2
         else:
             self.best_fit = self.current_fit
         return self.best_fit
@@ -88,11 +93,12 @@ class Line():
             else:
                 self.current_fit = np.polyfit(y, x, 2)
         except TypeError or ValueError as e:
-            print(print(self.name, self.cal_current_fit.__name__, e), e)
+            print(self.name, self.cal_current_fit.__name__, e)
             self.detected = False
             return None
         self.detected = True
         # print('current_fit', self.current_fit)
+        print(self.name, self.cal_current_fit.__name__, self.current_fit)
         return self.current_fit
 
     def store_current_fit(self):
@@ -100,9 +106,10 @@ class Line():
             # store fitted x value
             self.recent_xfitted.append(self.allx)
             self.recent_yfitted.append(self.ally)
-            x = np.concatenate(self.recent_xfitted, axis=0)
-            y = np.concatenate(self.recent_yfitted, axis=0)
-            self.current_fit = np.polyfit(y, x, 2)
+            # x = np.concatenate(self.recent_xfitted, axis=0)
+            # y = np.concatenate(self.recent_yfitted, axis=0)
+            # self.current_fit = np.polyfit(y, x, 2)
+            self.last_fit = self.current_fit
             self.fit_deque.append(self.current_fit)
 
     def cal_radius_of_curvature(self):
@@ -116,7 +123,7 @@ class Line():
             fit_cr = np.polyfit(y * ym_per_pix, x * xm_per_pix, 2)
             # Calculate the new radii of curvature
             self.radius_of_curvature = ((1 + (2 * fit_cr[0] * y_eval * ym_per_pix + fit_cr[1]) ** 2) ** 1.5) \
-                                       / np.absolute(2 * fit_cr[0])
+                                       / (2 * fit_cr[0])
         except TypeError or ValueError as e:
             print(self.name, self.cal_radius_of_curvature.__name__, e)
             return None
@@ -126,8 +133,8 @@ class Line():
 
     def cal_diff(self):
         try:
-            print(self.name, "best fit", self.best_fit)
-            self.diffs = np.array(self.current_fit) - np.array(self.fit_deque)[-1]
+            print(self.name, "last fit", self.last_fit)
+            self.diffs = np.array(self.current_fit) - self.last_fit
             return self.diffs
         except:
             print(self.name, self.cal_diff.__name__, "diff failed")
@@ -148,11 +155,11 @@ class Line():
             return None
 
 
-    def valid_xy(self, x, y, fit_thresh=(1e-2, 1e1, 2e2)):
+    def valid_xy(self, x, y, fit_thresh=(1e-2, 3e-1, 1.5e2)):
         self.set_allx(x)
         self.set_ally(y)
         if self.cal_current_fit() is None:
-            self.unvalid_cnt += 1
+            self.unvalid_cnt+= 1
             return False
         fit_diff = self.cal_diff()
         if fit_diff is None:
@@ -164,6 +171,8 @@ class Line():
             self.unvalid_cnt += 1
             print(self.name, 'Abandon', "diff:{:>10.5f} {:>10.5f} {:>10.5f} {:>10.5f}:".\
                   format(fit_diff[0], fit_diff[1], fit_diff[2], len(self.allx)))
+            self.last_fit = self.current_fit * 0.8 + self.best_fit * 0.2
+            # self.current_fit = self.last_fit
             return False
         else:
             print(self.name, "diff:{:>10.5f} {:>10.5f} {:>10.5f}:".format(fit_diff[0], fit_diff[1], fit_diff[2]))
@@ -172,14 +181,26 @@ class Line():
                 self.unvalid_cnt -= 1
             return True
 
+    def clean_deque(self):
+        self.fit_deque.clear()
+        self.recent_xfitted.clear()
+        self.recent_yfitted.clear()
+        # self.last_fit = None
+        self.curvature_deque.clear()
+
     def re_detected(self):
-        if self.unvalid_cnt > 5:
+        if self.unvalid_cnt > self.queue_len / 2:
             self.unvalid_cnt -= 1
             print(self.name, self.re_detected.__name__)
-            self.fit_deque.clear()
-            # self.recent_xfitted.clear()
-            # self.recent_yfitted.clear()
-            self.best_fit = None
+            # last_fit = self.fit_deque[-1]
+            if len(self.fit_deque) > 0:
+                self.fit_deque.popleft()
+            # self.fit_deque.append(last_fit)
+            # self.fit_deque.append(self.best_fit)
+            self.recent_xfitted.clear()
+            self.recent_yfitted.clear()
+            # self.last_fit = None
+            # self.best_fit = None
             self.curvature_deque.clear()
             return True
         return False

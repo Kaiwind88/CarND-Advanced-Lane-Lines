@@ -46,8 +46,10 @@ parameters = {
     'left_curverad': 0,
     'right_curverad': 0,
     'config-option': 0,
-    'brightness': 0
+    'brightness': 0,
+    'use_color': True
 }
+
 
 parameters_range = {
     'hlsthresh': (0, 255, 2),
@@ -180,7 +182,7 @@ def filter_yellow_white_color(img):
     y_upper = np.array([80, 255, 255])
     y_lower = np.array([0, 10, 20])
     w_upper = np.array([255, 255, 255])
-    w_lower = np.array([0, 195, 0])
+    w_lower = np.array([0, 130, 0])
 
     y_img_mask = cv2.inRange(img_cov, y_lower, y_upper)
     w_img_mask = cv2.inRange(img_cov, w_lower, w_upper)
@@ -376,7 +378,7 @@ def gaussian_blur(img, kernel_size):
 from collections import deque
 bright_deque = deque(maxlen=5)
 def adjust_parameter(parameters=parameters):
-    # return
+    return
     brightness = np.mean(bright_deque)
     if brightness >= 20 and brightness <= 50:
         ch = 2 #hls -> s
@@ -439,7 +441,7 @@ def yellow(img, parameters):
     combined = np.zeros_like(gray)
     # combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1)))] = 1
     combined[((xsobel == 1) & (ysobel == 1))] = 1
-    combined = gaussian_blur(combined, 5)
+    # combined = gaussian_blur(combined, 5)
 
     return combined
 
@@ -458,6 +460,9 @@ def enhance_img(img):
     dst = cv2.GaussianBlur(img, (0,0), 3)
     out = cv2.addWeighted(img, 1.5, dst, -0.5, 0)
     return out
+
+def use_color(use):
+    parameters['use_color'] = use
 
 def pipline(img, parameters):
     kernel = np.ones((5, 5), np.uint8)
@@ -490,16 +495,16 @@ def pipline(img, parameters):
     color = np.zeros_like(rgb_img)
     color[(rgb_img == 1) | (hls_img == 1)] = 1
 
-    color_erode = cv2.morphologyEx(color, cv2.MORPH_CLOSE, kernel)
+    # color_erode = cv2.morphologyEx(color, cv2.MORPH_CLOSE, kernel)
 
     zero_img = np.zeros_like(gray)
     # Step 2: xsobel
     thresh = parameters['xthresh']
     ksize = parameters['xksize']
     sw = parameters['x']
-    soble_input = color
-    soble_input = gaussian_blur(soble_input, 9)
-    xsobel = abs_sobel_thresh(soble_input, orient='x', sobel_kernel=ksize, thresh=thresh)\
+    soble_input = gray#color_select(undist_img_enhance, channel='S')
+    soble_input = gaussian_blur(soble_input, 15)
+    xsobel = abs_sobel_thresh(soble_input, orient='x', sobel_kernel=3, thresh=thresh)\
         if sw else zero_img
     # xsobel = cv2.dilate(xsobel, kernel, iterations = 1)
 
@@ -507,7 +512,7 @@ def pipline(img, parameters):
     thresh = parameters['ythresh']
     ksize = parameters['yksize']
     sw = parameters['y']
-    ysobel = abs_sobel_thresh(soble_input, orient='y', sobel_kernel=ksize, thresh=thresh)\
+    ysobel = abs_sobel_thresh(soble_input, orient='y', sobel_kernel=3, thresh=thresh)\
         if sw else zero_img
     # ysobel = cv2.dilate(ysobel, kernel, iterations = 1)
 
@@ -529,10 +534,14 @@ def pipline(img, parameters):
     combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1)))] = 1
     edge = unwarp(combined, M, mtx, dist)
 
+    if not parameters['use_color']:
+        color_img = zero_img
+    else:
+        color_img = color
     combined = np.zeros_like(ysobel)
-    combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1))) | (color == 1)] = 1
-    kernel = np.ones((3,3),np.uint8)
-    combined = cv2.dilate(combined, kernel, iterations=1)
+    combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1))) | (color_img == 1)] = 1
+    # kernel = np.ones((3,3),np.uint8)
+    # combined = cv2.dilate(combined, kernel, iterations=1)
     unwarp_img = unwarp(combined, M, mtx, dist)
 
     scale = 0.4
@@ -725,19 +734,25 @@ def show_processed_images(image_dict):
     plt.show()
 
 def transform(img, nx, ny, mtx, dist):
+    src = np.float32([[480, 500], [740, 500], [1110, 719.5], [200, 719.5]]) # (lt,rt,rb,lb)
+    dst = np.float32([[320, 0.5], [960, 0.5], [960, 700], [320, 700]])
+
+    # src = np.float32([[410, 560], [850, 560], [1110, 719.5], [200, 719.5]]) # (lt,rt,rb,lb)
+    # dst = np.float32([[320, 0.5], [960, 0.5], [960, 700], [320, 700]])
+
     # src = np.float32([[579, 460], [704, 460], [1110, 719.5], [200, 719.5]])
     # dst = np.float32([[320, 0.5], [960, 0.5], [960, 719.5], [320, 719.5]])
-    img_size = (img.shape[1], img.shape[0])
-    src = np.float32(
-        [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
-         [((img_size[0] / 6) - 10), img_size[1]],
-         [(img_size[0] * 5 / 6) + 60, img_size[1]],
-         [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
-    dst = np.float32(
-        [[(img_size[0] / 4), 0],
-         [(img_size[0] / 4), img_size[1]],
-         [(img_size[0] * 3 / 4), img_size[1]],
-         [(img_size[0] * 3 / 4), 0]])
+    # img_size = (img.shape[1], img.shape[0])
+    # src = np.float32(
+    #     [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
+    #      [((img_size[0] / 6) - 10), img_size[1]],
+    #      [(img_size[0] * 5 / 6) + 60, img_size[1]],
+    #      [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
+    # dst = np.float32(
+    #     [[(img_size[0] / 4), 0],
+    #      [(img_size[0] / 4), img_size[1]],
+    #      [(img_size[0] * 3 / 4), img_size[1]],
+    #      [(img_size[0] * 3 / 4), 0]])
     M = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
     MInv = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
     return M, MInv
@@ -753,3 +768,12 @@ def resize_image(img, shape, title = ''):
     w = resize_img.shape[1]
     cv2.rectangle(resize_img, (0, 0), (w, h), (0, 0, 255), 2)
     return resize_img
+
+
+current_frame_idx = 0
+def set_frame_idx(idx):
+    global current_frame_idx
+    current_frame_idx = idx
+
+def get_frame_idx(idx):
+    return current_frame_idx

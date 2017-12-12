@@ -153,3 +153,5 @@ print(q)
 
 a = [[1, 2, 3, 2, 1], [2, 3, 4, 3, 2], [3, 4, 5, 4,3], [2,4,6]]
 print(np.concatenate(a, axis=0))
+
+print(a[::2])
