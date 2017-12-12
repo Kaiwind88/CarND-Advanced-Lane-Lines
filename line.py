@@ -57,20 +57,6 @@ class Line():
 
     def cal_best_fit(self):
         if len(self.fit_deque) == self.queue_len:
-            # fits = np.array(self.fit_deque)
-            # avg_x = np.array(self.recent_xfitted)
-            # avg_x = avg_x.reshape((-1, 1))
-            # best_fit = fits * avg_x
-            # fits_sum = np.sum(best_fit, axis=0)
-            # avg_x_sum = np.sum(avg_x)
-            # best_fit = fits_sum / avg_x_sum
-            # print('--------')
-            # print("fits", fits)
-            # print('avg_x', avg_x)
-            # print(best_fit)
-            # print('--------')
-            # self.best_fit = best_fit
-            # self.best_fit = np.mean(self.fit_deque, axis=0, dtype=np.float32)
             fits = np.array(self.fit_deque)
             sum_weight = 0
             sum_fit = [0, 0, 0]
@@ -81,7 +67,7 @@ class Line():
             self.best_fit = best_fit
         elif len(self.fit_deque) > 0:
             mean_fit = np.mean(self.fit_deque, axis=0)
-            self.best_fit = self.current_fit * 0.8 + mean_fit * 0.2
+            self.best_fit = self.current_fit * 0.5 + mean_fit * 0.5
         else:
             self.best_fit = self.current_fit
         return self.best_fit
@@ -94,10 +80,7 @@ class Line():
                 self.current_fit = np.polyfit(y, x, 2)
         except TypeError or ValueError as e:
             print(self.name, self.cal_current_fit.__name__, e)
-            self.detected = False
             return None
-        self.detected = True
-        # print('current_fit', self.current_fit)
         print(self.name, self.cal_current_fit.__name__, self.current_fit)
         return self.current_fit
 
@@ -108,7 +91,7 @@ class Line():
             self.recent_yfitted.append(self.ally)
             # x = np.concatenate(self.recent_xfitted, axis=0)
             # y = np.concatenate(self.recent_yfitted, axis=0)
-            # self.current_fit = np.polyfit(y, x, 2)
+            # self.best_fit = np.polyfit(y, x, 2)
             self.last_fit = self.current_fit
             self.fit_deque.append(self.current_fit)
 
@@ -123,10 +106,10 @@ class Line():
             fit_cr = np.polyfit(y * ym_per_pix, x * xm_per_pix, 2)
             # Calculate the new radii of curvature
             self.radius_of_curvature = ((1 + (2 * fit_cr[0] * y_eval * ym_per_pix + fit_cr[1]) ** 2) ** 1.5) \
-                                       / (2 * fit_cr[0])
-        except TypeError or ValueError as e:
-            print(self.name, self.cal_radius_of_curvature.__name__, e)
-            return None
+                                       / abs(2 * fit_cr[0])
+        except:
+            print(self.name, self.cal_radius_of_curvature.__name__)
+            return self.radius_of_curvature
         self.curvature_deque.append(self.radius_of_curvature)
         curve = np.mean(self.curvature_deque, dtype=np.float32)
         return curve
@@ -155,7 +138,30 @@ class Line():
             return None
 
 
-    def valid_xy(self, x, y, fit_thresh=(1e-2, 3e-1, 1.5e2)):
+    def valid_xy(self, x, y, fit_thresh=(1e-2, 3e-1, 2e2)):
+        try:
+            curve = abs(np.mean(self.curvature_deque, dtype=np.float32))
+            factor = 1.0
+            fit_thresh = np.array(fit_thresh)
+            if curve < 200:
+                factor = 2
+            elif curve < 400:
+                factor = 1.8
+            elif curve < 500:
+                factor = 1.5
+            elif curve < 1000:
+                factor = 1.2
+            elif curve < 5000:
+                factor = 1.1
+            elif curve < 10000:
+                factor = 0.8
+            else:
+                factor = 0.6
+            fit_thresh = fit_thresh * factor
+            print("Fit_Thresh: ", fit_thresh, curve, factor)
+        except:
+            print('curve miss')
+
         self.set_allx(x)
         self.set_ally(y)
         if self.cal_current_fit() is None:
@@ -163,6 +169,7 @@ class Line():
             return False
         fit_diff = self.cal_diff()
         if fit_diff is None:
+            self.detected = True
             self.store_current_fit()
             return True
         if abs(fit_diff[0]) > fit_thresh[0] \
@@ -171,12 +178,14 @@ class Line():
             self.unvalid_cnt += 1
             print(self.name, 'Abandon', "diff:{:>10.5f} {:>10.5f} {:>10.5f} {:>10.5f}:".\
                   format(fit_diff[0], fit_diff[1], fit_diff[2], len(self.allx)))
-            self.last_fit = self.current_fit * 0.8 + self.best_fit * 0.2
+            self.detected = False
+            # self.last_fit = self.current_fit * 0.8 + self.best_fit * 0.2
             # self.current_fit = self.last_fit
             return False
         else:
             print(self.name, "diff:{:>10.5f} {:>10.5f} {:>10.5f}:".format(fit_diff[0], fit_diff[1], fit_diff[2]))
-            self.store_current_fit()
+            self.detected = True
+            # self.store_current_fit()
             if self.unvalid_cnt > 0:
                 self.unvalid_cnt -= 1
             return True
@@ -189,19 +198,19 @@ class Line():
         self.curvature_deque.clear()
 
     def re_detected(self):
-        if self.unvalid_cnt > self.queue_len / 2:
+        if self.unvalid_cnt > self.queue_len // 2:
             self.unvalid_cnt -= 1
             print(self.name, self.re_detected.__name__)
             # last_fit = self.fit_deque[-1]
-            if len(self.fit_deque) > 0:
-                self.fit_deque.popleft()
+            # if len(self.fit_deque) > 0:
+            #     self.fit_deque.popleft()
             # self.fit_deque.append(last_fit)
             # self.fit_deque.append(self.best_fit)
-            self.recent_xfitted.clear()
-            self.recent_yfitted.clear()
+            # self.recent_xfitted.clear()
+            # self.recent_yfitted.clear()
             # self.last_fit = None
             # self.best_fit = None
-            self.curvature_deque.clear()
+            # self.curvature_deque.clear()
             return True
         return False
 

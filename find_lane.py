@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 from line import *
-from preprocess import use_color
+from preprocess import *
 
 class Lane():
     def __init__(self, MInv):
@@ -33,12 +33,12 @@ class Lane():
     def find_lane(self):
         # Assuming you have created a warped binary image called "binary_warped"
         # Take a histogram of the bottom half of the image
-        histogram = np.sum(self.binary_warped[self.binary_warped.shape[0] // 2:, :], axis=0)
+        histogram = np.sum(self.binary_warped[self.binary_warped.shape[0] // 2:, :], axis=0) #TODO: using avg center
         # Create an output image to draw on and  visualize the result
         # out_img = np.dstack((binary_warped, binary_warped, binary_warped)) * 255
         # Find the peak of the left and right halves of the histogram
         # These will be the starting point for the left and right lines
-        midpoint = np.int(histogram.shape[0] / 2)
+        midpoint = np.int(histogram.shape[0] / 2)#TODO
         leftx_base = np.argmax(histogram[:midpoint])
         rightx_base = np.argmax(histogram[midpoint:]) + midpoint
 
@@ -92,7 +92,7 @@ class Lane():
 
         if left_hit < 2 or right_hit < 2:
             self.redetect = True
-            return
+            return False
         # Concatenate the arrays of indices
         left_lane_inds = np.concatenate(left_lane_inds)
         right_lane_inds = np.concatenate(right_lane_inds)
@@ -102,7 +102,6 @@ class Lane():
         lane_margin = 0
         if 100 < abs(650 - middle):
             print("find_lane distance failed:{:>.2f}".format(middle))
-            return
 
         # Extract left and right line pixel positions
         self.leftx = leftx #nonzerox[left_lane_inds]
@@ -110,7 +109,7 @@ class Lane():
         self.rightx = rightx #nonzerox[right_lane_inds]
         self.righty = nonzeroy[right_lane_inds]
 
-        return self.leftx, self.lefty, self.rightx, self.righty
+        return True
 
     def find_lane_skip_window(self):
         nonzero = self.binary_warped.nonzero()
@@ -132,20 +131,24 @@ class Lane():
                         right_fit[2] - margin)) & (nonzerox < (right_fit[0] * (nonzeroy ** 2) +
                         right_fit[1] * nonzeroy + right_fit[2] + margin)))
 
-        minpix = self.minpix * 9
+        minpix = self.minpix * 5
         leftx = nonzerox[left_lane_inds]
         rightx = nonzerox[right_lane_inds]
         if len(leftx) < minpix or len(rightx) < minpix:
-            return
+            print('Too little points', len(leftx), len(rightx))
+            self.leftx = 0
+            self.lefty = 0
+            self.rightx = 0
+            self.righty = 0
+            return False
+        else:
+            # Again, extract left and right line pixel positions
+            self.leftx = nonzerox[left_lane_inds]
+            self.lefty = nonzeroy[left_lane_inds]
+            self.rightx = nonzerox[right_lane_inds]
+            self.righty = nonzeroy[right_lane_inds]
 
-        # Again, extract left and right line pixel positions
-        self.leftx = nonzerox[left_lane_inds]
-        self.lefty = nonzeroy[left_lane_inds]
-        self.rightx = nonzerox[right_lane_inds]
-        self.righty = nonzeroy[right_lane_inds]
-
-
-        return self.leftx, self.lefty, self.rightx, self.righty
+            return True
 
     def show_lane(self):
         binary_warped = self.binary_warped
@@ -155,8 +158,6 @@ class Lane():
 
         if self.left_fit is None or self.right_fit is None:
             return np.dstack((binary_warped, binary_warped, binary_warped)) * 255
-        # print('left_fit', left_fit)
-        # print('right_fit', right_fit)
         # Generate x and y values for plotting
         ploty = np.linspace(0, binary_warped.shape[0] - 1, binary_warped.shape[0])
         left_fitx = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
@@ -218,6 +219,13 @@ class Lane():
         result = cv2.addWeighted(orig, 1, newwarp, 0.3, 0)
         return result
 
+    def show_default_img(self, img):
+        print('cannot find both')
+        z = np.zeros_like(img)
+        out_img = np.dstack((z, z, z)) * 255
+        return np.zeros_like(img)
+
+
     def fit_lane(self, warped_img):
         if self.redetect_cnt > 5:
             self.redetect_cnt -= 1
@@ -225,37 +233,20 @@ class Lane():
 
         self.binary_warped = warped_img
         if self.redetect:
-            self.use_color = not self.use_color
-            use_color(self.use_color)
+            if parameters['brightness'] > 90:
+                use_color(True)
+            else:
+                use_color(False)
             print('fit_lane redetect')
-            self.distance_queue.clear()
-            self.find_lane()
-            try:
-                len_right = len(self.rightx)
-            except:
-                len_right = 0
-            try:
-                len_left = len(self.leftx)
-            except:
-                len_left = 0
-            # if len_left == 0 and len_right != 0:
-            #     print('cannot find left')
-            #     self.leftx = self.rightx - 500
-            #     self.lefty = self.righty
-            # elif len_right == 0 and len_left != 0:
-            #     print('cannot find right')
-            #     self.rightx = self.leftx + 500
-            #     self.righty = self.lefty
-            if len_left == 0 or len_right == 0:
-                print('cannot find both')
-                z = np.zeros_like(warped_img)
-                out_img = np.dstack((z, z, z)) * 255
-                return np.zeros_like(warped_img)
+            # self.distance_queue.clear()
+            if not self.find_lane():
+                return self.show_default_img(warped_img)
         else:
-            # self.find_lane()
-            self.find_lane_skip_window()
+            if not self.find_lane_skip_window():
+                self.redetect_cnt += 1
+                return self.show_default_img(warped_img)
+
         self.redetect = False
-        # self.find_lane()
         redetect = self.fitxy()
         # if not redetect:
         try:
@@ -267,15 +258,12 @@ class Lane():
             print('curvature: {:>9.4} {:>9.4}'.format(self.left_radius_of_curvature, self.right_radius_of_curvature))
         except:
             print('offset', None)
-        # self.fit =
 
         return self.show_lane()
 
     def fitxy(self):
         left_val = self.left_line.valid_xy(self.leftx, self.lefty)
         right_val = self.right_line.valid_xy(self.rightx, self.righty)
-
-
         if left_val:
             self.left_bestx, self.left_line_base_pos, self.left_radius_of_curvature, _ = self.left_line.fit_xy()
         else:
@@ -293,78 +281,52 @@ class Lane():
     def get_lane_prop(self):
         return self.offset, self.left_bestx, self.right_bestx, self.left_radius_of_curvature, self.right_radius_of_curvature
 
-
-    def make_fake_line(self, left_line, right_line):
+    def valid_redetected_current_fit(self, left_line, right_line):
         if self.left_confidence and self.right_confidence:
-            return 1#both confident, use best_fit
+            return 0#both confident, use best_fit
         max_y = self.binary_warped.shape[0]
         valid_y = np.array([max_y, max_y // 2, 0])
-        if len(self.distance_queue) > 0:
-            lane_space = np.mean(self.distance_queue, axis=0)
-        else:
-            lane_space = [600, 600, 600, 650]
-        margin = [150, 150, 150, 100]
 
         left_fit = left_line.current_fit
         right_fit = right_line.current_fit
         left_fitx = left_fit[0] * valid_y ** 2 + left_fit[1] * valid_y + left_fit[2]
         right_fitx = right_fit[0] * valid_y ** 2 + right_fit[1] * valid_y + right_fit[2]
-        current_middle = (left_fitx[0] + right_fitx[0]) / 2
-        lane_current_distance = abs(right_fitx - left_fitx)
-        lane_current_distance = np.append(lane_current_distance, current_middle)
-        avg_distance = np.mean(lane_current_distance[:-1])
+
+        lane_current_distance = right_fitx - left_fitx
+        avg_distance = np.mean(lane_current_distance)
         abandon_current_fit = False
-        for i, distance in enumerate(lane_current_distance[:-1]):
-            if abs(avg_distance - distance) > 200:
+        for i, distance in enumerate(lane_current_distance):
+            if distance < 0 or abs(avg_distance - distance) > 100:
                 abandon_current_fit = True
                 break
-            # if distance > (lane_space[i] + margin[i]) or distance < (lane_space[i] - margin[i]):
-            #     abandon_current_fit = True
-            #     break
 
-
-        gap = np.mean(lane_space)
-        if abandon_current_fit and self.redetect_cnt < 2:
-            self.distance_queue.append(lane_current_distance * 0.7 + np.array([600, 600, 600, 650]) * 0.3)
-            return 3
-            # if self.left_confidence:
-            #     print('make right fake')
-            #     self.right_confidence = True
-            #     self.rightx = self.leftx + gap #TODO: out of range
-            #     self.righty = self.lefty
-            #     self.right_line.clean_deque()
-            #     self.fitxy()
-            #     return 2 #don't need valid both
-            # elif self.right_confidence:
-            #     print('make left fake')
-            #     self.left_confidence = True
-            #     self.leftx = self.rightx - gap #TODO: out of range
-            #     self.lefty = self.righty
-            #     self.left_line.clean_deque()
-            #     self.fitxy()
-            #     return 2
-            # else:
-            #     # self.left_line.clean_deque()
-            #     # self.right_line.clean_deque()
-            #     self.redetect = True
-            #     return 3 # redetect
+        if abandon_current_fit:
+            return 2
         else:
             self.left_confidence = True
             self.right_confidence = True
             self.left_line.last_fit = self.left_line.current_fit
             self.right_line.last_fit = self.right_line.current_fit
-            return 0 #use last fit
+            self.left_line.store_current_fit()
+            self.right_line.store_current_fit()
+            return 1
 
 
     def valid_both_lanes(self, left_line, right_line):
-        ret = self.make_fake_line(left_line, right_line)
-        if ret == 0:
-            return True, self.left_line.current_fit, self.right_line.current_fit
-        if ret == 3:
-            return False, self.left_fit, self.right_fit
-        elif ret == 2:
-            return True, self.left_line.best_fit, self.right_line.best_fit
-
+        ret = self.valid_redetected_current_fit(left_line, right_line)
+        if ret > 0 :
+            if ret == 1:
+                print("Fit: Redetected Current")
+                return True, self.left_line.current_fit, self.right_line.current_fit
+            elif ret == 2:
+                print("Fit: Redetected Defatult")
+                return False, self.left_fit, self.right_fit
+            elif ret == 3:
+                print("Fit: Redetected Best")
+                return True, self.left_line.best_fit, self.right_line.best_fit
+        else:
+            print("Both Confidence")
+            pass
 
         max_y = self.binary_warped.shape[0]
         valid_y = np.array([max_y, max_y//2, 0])
@@ -372,9 +334,8 @@ class Lane():
             lane_space = np.mean(self.distance_queue, axis=0)
         else:
             lane_space = [600, 600, 600, 650]
-        margin = [150, 250, 350, 100]
-        bad_current_margin = [150,200,250,80]
-        good_current_margin = [130, 180, 230, 80]
+        bad_current_margin = [150,250,350,80]
+        good_current_margin = [100, 150, 250, 80]
 
         left_fit = left_line.best_fit
         right_fit = right_line.best_fit
@@ -385,83 +346,85 @@ class Lane():
         lane_best_distance = right_fitx - left_fitx
         lane_best_distance = np.append(lane_best_distance, best_middle)
 
-        left_fit = left_line.current_fit
-        right_fit = right_line.current_fit
+        if left_line.detected:
+            left_fit = left_line.current_fit
+        else:
+            left_fit = left_line.best_fit
+        if right_line.detected:
+            right_fit = right_line.current_fit
+        else:
+            right_fit = right_line.best_fit
+
         left_fitx = left_fit[0] * valid_y ** 2 + left_fit[1] * valid_y + left_fit[2]
         right_fitx = right_fit[0] * valid_y ** 2 + right_fit[1] * valid_y + right_fit[2]
         current_middle = (left_fitx[0] + right_fitx[0]) / 2
         lane_current_distance = right_fitx - left_fitx
         lane_current_distance = np.append(lane_current_distance, current_middle)
 
-        print('lane_current_distance', lane_current_distance, lane_current_distance-lane_space)
-        print('lane_best_distance', lane_best_distance, lane_best_distance-lane_space)
-        lane_distance = lane_current_distance * 0.5 + lane_best_distance * 0.5
-        self.distance_queue.append(lane_distance * 0.7 + np.array([600, 600, 600, 650])*0.3)
-        print('lane_distance', lane_distance)
+        print('Distance Curr: ', lane_current_distance)
+        print('Curr Gap: ', lane_current_distance-lane_space)
+        print('Distance Best: ', lane_best_distance)
+        print('Best Gap: ', lane_best_distance-lane_space)
+        lane_distance = lane_current_distance * 0.8 + lane_best_distance * 0.2
+        # print('lane_distance', lane_distance)
 
+        # self.distance_queue.append(lane_distance * 0.7 + np.array([600, 600, 600, 650]) * 0.3)
 
-
-        left_fit = left_line.best_fit
-        right_fit = right_line.best_fit
-        valid = True
         abandon_bad_current_fit = False
-        current_margin = bad_current_margin
+        abandon_good_current_fit = False
         for i, distance in enumerate(lane_current_distance):
-            if distance < 0 or distance > (lane_space[i] + current_margin[i]) \
-                    or distance < (lane_space[i] - current_margin[i]):
+            if distance < 0 or abs(distance - lane_space[i]) > bad_current_margin[i]:
                 abandon_bad_current_fit = True
+                abandon_good_current_fit = True
                 break
+            elif abs(distance - lane_space[i]) > good_current_margin[i]:
+                abandon_good_current_fit = True
+            else:
+                continue
 
         if abandon_bad_current_fit:
-            abandon_good_current_fit = True
-        else:
-            print("Check bad_current_margin passed")
-            abandon_good_current_fit = False
-            current_margin = good_current_margin
-            for i, distance in enumerate(lane_current_distance):
-                if distance < 0  or distance > (lane_space[i] + current_margin[i]) \
-                        or distance < (lane_space[i] - current_margin[i]):
-                    abandon_good_current_fit = True
-                    break
-
-        if abandon_good_current_fit:
-            print("Check good current margin failed")
-            print("FIT: using best fit")
-            self.left_line.last_fit = self.left_line.best_fit
-            self.right_line.last_fit = self.right_line.best_fit
+            print("FIT: Default fit")
+            left_fit = self.left_fit
+            right_fit = self.right_fit
             self.redetect_cnt += 1
-            # return valid, left_fit, right_fit
+            self.distance_queue.append(lane_best_distance * 0.7 + np.array([600, 600, 600, 650]) * 0.3)
+        elif abandon_good_current_fit:
+            print("FIT: Best fit")
+            left_fit = left_line.best_fit
+            right_fit = right_line.best_fit
+            # self.left_line.last_fit = self.left_line.best_fit
+            # self.right_line.last_fit = self.right_line.best_fit
+            # self.redetect_cnt += 1
+            self.distance_queue.append(lane_distance)
         else:
-            if left_line.unvalid_cnt == 0:
-                left_fit = left_line.current_fit
-            if right_line.unvalid_cnt == 0:
-                right_fit = right_line.current_fit
-            valid = True
+            factor = 0.2
+            print("FIT: Curr fit")
+            if self.left_line.detected:
+                self.left_line.store_current_fit()
+            else:
+                self.left_line.last_fit = self.left_line.last_fit * (1 - factor) \
+                                          + self.left_line.current_fit * factor
+            if self.right_line.detected:
+                self.right_line.store_current_fit()
+            else:
+                self.right_line.last_fit = self.right_line.last_fit * (1 - factor) \
+                                           + self.right_line.current_fit * factor
             if self.redetect_cnt > 0:
                 self.redetect_cnt -= 1
-            print("FIT: using current_fit")
+            self.distance_queue.append(lane_current_distance)
 
-        # for i, distance in enumerate(lane_distance):
-        #     if distance > (lane_space[i] + margin[i]) or distance < (lane_space[i] - margin[i]):
-        #         left_fit = self.left_fit
-        #         right_fit = self.right_fit
-        #         valid = False
-        #         print("FIT: using last fit")
-        #         if self.valid_both_lanes_cnt < 3:
-        #             self.valid_both_lanes_cnt += 1
-        #             print("valid_both_lines failed")
-        #             break
-        #         else:
-        #             print('valid_both_lines failed, but use the failed fit')
-        #             break;
-        #
-        # if self.valid_both_lanes_cnt > 0:
-        #     self.valid_both_lanes_cnt -= 1
-
-        print('valid_both_lines success')
-        return valid, left_fit, right_fit
+        return left_fit, right_fit
 
     def fit_smoothing(self, left_line, right_line):
+        try:
+            left_fit, right_fit = self.valid_both_lanes(left_line, right_line)
+        except:
+            left_fit = self.left_fit
+            right_fit = self.right_fit
+        return left_fit, right_fit
+
+    def fit_smoothing_abondon(self):
+        pass
         # left_weight = np.array(left_line.n_x_deque)
         # right_weight = np.array(right_line.n_x_deque)
         # left_fit = np.array(left_line.fit_deque)
@@ -515,20 +478,6 @@ class Lane():
         # right_best_fit = np.append(both_fit, r_c)
         # print('left fit: {:>9.4} {:>9.4} {:>9.4}'.format(left_best_fit[0], left_best_fit[1], left_best_fit[2]))
         # print('right fit: {:>9.4} {:>9.4} {:>9.4}'.format(right_best_fit[0], right_best_fit[1], right_best_fit[2]))
-
-        try:
-            valid, left_fit, right_fit = self.valid_both_lanes(left_line, right_line)
-        except:
-            valid = False
-            left_fit = self.left_fit
-            right_fit = self.right_fit
-        if valid:
-            print('new best_fit')
-        else:
-            print('last fit')
-            self.redetect_cnt += 1
-
-        return left_fit, right_fit
 
         # return left_best_fit, right_best_fit
         # return left_line.best_fit, right_line.best_fit
