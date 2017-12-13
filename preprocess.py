@@ -31,7 +31,8 @@ parameters = {
     'mksize': 9,
     'dksize': 15,
     'h': 'S',
-    'b': 'B',
+    'c': 'B',
+    'b': False,
     'x': True,
     'y': True,
     'm': True,
@@ -39,6 +40,8 @@ parameters = {
     'u': True,
     'w': True,
     'p': True,
+    's': False,
+    'r': True,
     'mtx': None,
     'dist': None,
     'M': None,
@@ -130,6 +133,9 @@ def show_comparison_images(orig, dest):
     plt.imshow(comp)
     plt.show()
 
+def breakpoint(b):
+    if b and parameters['b']:
+        parameters['s'] = True
 
 def region_of_interest(img):
     # return img
@@ -489,7 +495,7 @@ def pipline(img, parameters):
     channel = parameters['h']
     hls_img = color_select(wy_img, channel=channel)
 
-    channel = parameters['b']
+    channel = parameters['c']
     rgb_img = color_select(wy_img, channel=channel)
 
     color = np.zeros_like(rgb_img)
@@ -586,8 +592,8 @@ def key_handler(delay, parameters):
         key_handler.hlschannel += 1
         key_handler.hlschannel = key_handler.hlschannel % 4
         key_handler.arrow_key_state = key_state.hlsthresh
-    elif key == ord('b'):
-        parameters['b'] = parameters_range['rgbchannel'][key_handler.rgbchannel]
+    elif key == ord('c'):
+        parameters['c'] = parameters_range['rgbchannel'][key_handler.rgbchannel]
         key_handler.rgbchannel += 1
         key_handler.rgbchannel = key_handler.rgbchannel % 4
         key_handler.arrow_key_state = key_state.rgbthresh
@@ -615,6 +621,17 @@ def key_handler(delay, parameters):
     elif key == ord('S'):
         save_data()
         key_handler.arrow_key_state = key_state.ignore
+    elif key == ord('s'):
+        parameters['s'] = True
+        parameters['r'] = False
+        key_handler.arrow_key_state = key_state.ignore
+    elif key == ord('r'):
+        parameters['r'] = True
+        parameters['s'] = False
+        key_handler.arrow_key_state = key_state.ignore
+    elif key == ord('b'):
+        parameters['b'] = not parameters['b']
+        key_handler.arrow_key_state = key_state.ignore
     elif key in arrow_key_code.values():
         if key_handler.arrow_key_state.value != key_state.ignore.value:
             parameters_key = key_handler.arrow_key_state.name
@@ -623,7 +640,7 @@ def key_handler(delay, parameters):
                 thresh_min = parameters[parameters_key][ch][0]
                 thresh_max = parameters[parameters_key][ch][1]
             elif  parameters_key == 'rgbthresh':
-                ch = parameters_range['rgbchannel'].index(parameters['b'])
+                ch = parameters_range['rgbchannel'].index(parameters['c'])
                 thresh_min = parameters[parameters_key][ch][0]
                 thresh_max = parameters[parameters_key][ch][1]
             else:
@@ -663,7 +680,7 @@ def key_handler(delay, parameters):
                 parameters[parameters_key][ch][0] = thresh_min
                 parameters[parameters_key][ch][1] = thresh_max
             else:
-                ch = parameters_range['rgbchannel'].index(parameters['b'])
+                ch = parameters_range['rgbchannel'].index(parameters['c'])
                 parameters[parameters_key][0] = thresh_min
                 parameters[parameters_key][1] = thresh_max
 
@@ -682,8 +699,8 @@ def show_text(img, parameters):
     text = "HLS channel:{} min:{} max:{}".format(parameters['h'], \
             parameters['hlsthresh'][ch][0], parameters['hlsthresh'][ch][1])
     lines.append(text)
-    ch = parameters_range['rgbchannel'].index(parameters['b'])
-    text = "RGB channel:{} min:{} max:{}".format(parameters['b'], \
+    ch = parameters_range['rgbchannel'].index(parameters['c'])
+    text = "RGB channel:{} min:{} max:{}".format(parameters['c'], \
             parameters['rgbthresh'][ch][0], parameters['rgbthresh'][ch][1])
     lines.append(text)
     for prefix in ['x', 'y', 'm', 'd']:
@@ -696,6 +713,8 @@ def show_text(img, parameters):
     text = 'Right Curvature:{:>.2f}m'.format(parameters['right_curverad'])
     lines.append(text)
     text = "Brightness:{:>.2f}".format(parameters['brightness'])
+    lines.append(text)
+    text = "Breakpoint:{}".format(parameters['b'])
     lines.append(text)
 
     for i, line in enumerate(lines):

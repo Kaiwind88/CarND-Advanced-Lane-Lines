@@ -52,10 +52,14 @@ def nothing(x):
     cap.set(cv2.CAP_PROP_POS_FRAMES, x)
 cv2.createTrackbar('Frame',w_name,0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),nothing)
 
-
+delay = 1
 while(cap.isOpened()):
-    if key_handler(1, parameters):
+    if key_handler(delay, parameters):
         break
+    if parameters['s']:
+        delay = 0
+    else:
+        delay = 1
 
     if parameters['p']:
         ret, frame = cap.read()
@@ -108,90 +112,9 @@ while(cap.isOpened()):
     # print(resize_color_img.shape, resize_unwarped_img.shape, resize_project_img.shape, resize_combined_img.shape)
     final_img = np.vstack((np.hstack((resize_color_img, resize_color_unwarped, resize_rgb_img)), \
                            np.hstack((resize_combined_img, resize_unwarped_img, resize_undist_img)),
-                           np.hstack((resize_fit_lane_img, resize_edge_img, resize_project_img))))
+                           np.hstack((resize_project_img, resize_edge_img, resize_fit_lane_img))))
     cv2.imshow(w_name, final_img)
-
-
-    # cv2.imshow('unwarp', resize_img)
-    # resize_img = cv2.resize(orig, resize_shape, interpolation=cv2.INTER_CUBIC)
-    # cv2.imshow(w_name, resize_img)
-
-    # cv2.imshow('project', resize_img)
-    # # c = np.dstack((np.zeros_like(hls_img), hls_img, np.zeros_like(hls_img)))*255
-    # # resize_img = cv2.resize(c, resize_shape, interpolation=cv2.INTER_CUBIC)
-    # # cv2.imshow('S', resize_img)
-    # #
-    # # c = np.dstack((np.zeros_like(rgb_img), np.zeros_like(rgb_img), rgb_img))*255
-    # # resize_img = cv2.resize(c, resize_shape, interpolation=cv2.INTER_CUBIC)
-    # # cv2.imshow('R', resize_img)
-    #
-    # c = np.dstack((s, s, s))*255
-    # resize_img = cv2.resize(c, resize_shape, interpolation=cv2.INTER_CUBIC)
-    # cv2.imshow('C', resize_img)
-    #
-    # c = np.dstack((combined, combined, combined))*255
-    # resize_img = cv2.resize(c, resize_shape, interpolation=cv2.INTER_CUBIC)
-    # cv2.imshow('Sobel', resize_img)
 
 cap.release()
 cv2.destroyAllWindows()
 
-# import numpy as np
-# import cv2
-#
-#
-# def resize_image(img, shape, title = ''):
-#     if len(img.shape) == 3:
-#         stack = img
-#     else:
-#         stack = np.dstack((img, img, img))*255
-#     show_line(stack, title)
-#     resize_img = cv2.resize(stack, shape, interpolation=cv2.INTER_CUBIC)
-#     return resize_img
-#
-# # cap = cv2.VideoCapture('project_video.mp4')
-# # # cap = cv2.VideoCapture('challenge_video.mp4')
-# cap = cv2.VideoCapture('harder_challenge_video.mp4')
-#
-# kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
-# fgbg = cv2.createBackgroundSubtractorMOG2()
-#
-# while(1):
-#     ret, frame = cap.read()
-#
-#     fgmask = fgbg.apply(frame)
-#     fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
-#     mask_rbg = cv2.cvtColor(fgmask, cv2.COLOR_GRAY2BGR)
-#     scale = 0.45
-#
-#     draw = frame & mask_rbg
-#     resize_shape = (int(frame.shape[1]*scale), int(frame.shape[0]*scale))
-#
-#     s = resize_image(frame, resize_shape)
-#     d = resize_image(fgmask, resize_shape)
-#     e = resize_image(draw, resize_shape)
-#     stack = np.vstack((s, d, e))
-#     cv2.imshow('frame',stack)
-#     k = cv2.waitKey(10) & 0xFF
-#     if k == ord('q'):
-#         break
-#
-# cap.release()
-# cv2.destroyAllWindows()
-
-# kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
-# fgbg = cv2.createBackgroundSubtractorMOG2()
-#
-# while(1):
-#     ret, frame = cap.read()
-#
-#     fgmask = fgbg.apply(frame)
-#     fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
-#
-#     cv2.imshow('frame',fgmask)
-#     k = cv2.waitKey(30) & 0xff
-#     if k == 27:
-#         break
-#
-# cap.release()
-# cv2.destroyAllWindows()

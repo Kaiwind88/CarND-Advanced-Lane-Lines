@@ -99,7 +99,6 @@ class Lane():
         leftx = nonzerox[left_lane_inds]
         rightx = nonzerox[right_lane_inds]
         middle = (np.mean(rightx) + np.mean(leftx)) / 2
-        lane_margin = 0
         if 100 < abs(650 - middle):
             print("find_lane distance failed:{:>.2f}".format(middle))
 
@@ -121,7 +120,7 @@ class Lane():
         right_fit = self.right_fit
 
         if left_fit is None or right_fit is None:
-            return None, 0, 0, None, None
+            return False
 
         left_lane_inds = ((nonzerox > (left_fit[0] * (nonzeroy ** 2) + left_fit[1] * nonzeroy +
                         left_fit[2] - margin)) & (nonzerox < (left_fit[0] * (nonzeroy ** 2) +
@@ -186,7 +185,7 @@ class Lane():
         # Draw the lane onto the warped blank image
         cv2.fillPoly(window_img, np.int_([left_line_pts]), (0, 255, 0))
         cv2.fillPoly(window_img, np.int_([right_line_pts]), (0, 255, 0))
-        result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
+        result = cv2.addWeighted(out_img, 1, window_img, 0.5, 0)
 
         return result
 
@@ -222,7 +221,7 @@ class Lane():
     def show_default_img(self, img):
         print('cannot find both')
         z = np.zeros_like(img)
-        out_img = np.dstack((z, z, z)) * 255
+        # out_img = np.dstack((z, z, z)) * 255
         return np.zeros_like(img)
 
 
@@ -252,10 +251,10 @@ class Lane():
         try:
             self.offset = self.left_line_base_pos + self.right_line_base_pos
             self.left_fit, self.right_fit = self.fit_smoothing(self.left_line, self.right_line)
-            print('left best fit: {:>9.4} {:>9.4} {:>9.4}'.format(self.left_fit[0], self.left_fit[1], self.left_fit[2]))
-            print('right best fit: {:>9.4} {:>9.4} {:>9.4}'.format(self.right_fit[0], self.right_fit[1], self.right_fit[2]))
-            print('offset: {:>9.4} {:>9.4} {:>9.4}'.format(self.left_line_base_pos, self.right_line_base_pos, self.offset))
-            print('curvature: {:>9.4} {:>9.4}'.format(self.left_radius_of_curvature, self.right_radius_of_curvature))
+            # print('left best fit: {:>9.4} {:>9.4} {:>9.4}'.format(self.left_fit[0], self.left_fit[1], self.left_fit[2]))
+            # print('right best fit: {:>9.4} {:>9.4} {:>9.4}'.format(self.right_fit[0], self.right_fit[1], self.right_fit[2]))
+            # print('offset: {:>9.4} {:>9.4} {:>9.4}'.format(self.left_line_base_pos, self.right_line_base_pos, self.offset))
+            # print('curvature: {:>9.4} {:>9.4}'.format(self.left_radius_of_curvature, self.right_radius_of_curvature))
         except:
             print('offset', None)
 
@@ -285,7 +284,7 @@ class Lane():
         if self.left_confidence and self.right_confidence:
             return 0#both confident, use best_fit
         max_y = self.binary_warped.shape[0]
-        valid_y = np.array([max_y, max_y // 2, 0])
+        valid_y = np.array([max_y, max_y // 2])
 
         left_fit = left_line.current_fit
         right_fit = right_line.current_fit
@@ -294,6 +293,7 @@ class Lane():
 
         lane_current_distance = right_fitx - left_fitx
         avg_distance = np.mean(lane_current_distance)
+        print("Redetect Distance:", lane_current_distance, avg_distance)
         abandon_current_fit = False
         for i, distance in enumerate(lane_current_distance):
             if distance < 0 or abs(avg_distance - distance) > 100:
@@ -303,27 +303,45 @@ class Lane():
         if abandon_current_fit:
             return 2
         else:
-            self.left_confidence = True
             self.right_confidence = True
-            self.left_line.last_fit = self.left_line.current_fit
-            self.right_line.last_fit = self.right_line.current_fit
-            self.left_line.store_current_fit()
-            self.right_line.store_current_fit()
+            self.left_confidence = True
+
+            if True or self.left_line.detected:
+                self.left_line.last_fit = self.left_line.current_fit
+                self.left_line.store_current_fit()
+            else:
+                self.left_line.last_fit = self.left_fit
+
+            if True or self.right_line.detected:
+                self.right_line.last_fit = self.right_line.current_fit
+                self.right_line.store_current_fit()
+            else:
+                self.right_line.last_fit = self.right_fit
+
             return 1
 
 
     def valid_both_lanes(self, left_line, right_line):
         ret = self.valid_redetected_current_fit(left_line, right_line)
         if ret > 0 :
+            breakpoint(ret > 0)
             if ret == 1:
                 print("Fit: Redetected Current")
-                return True, self.left_line.current_fit, self.right_line.current_fit
+                return self.left_line.current_fit, self.right_line.current_fit
+                # if self.left_line.detected and self.right_line.detected:
+                #     return self.left_line.current_fit, self.right_line.current_fit
+                # elif self.left_line.detected:
+                #     return self.left_line.current_fit, self.right_fit
+                # elif self.right_line.detected:
+                #     return self.left_fit, self.right_line.current_fit
+                # else:
+                #     return self.left_fit, self.right_fit
             elif ret == 2:
                 print("Fit: Redetected Defatult")
-                return False, self.left_fit, self.right_fit
+                return self.left_fit, self.right_fit
             elif ret == 3:
                 print("Fit: Redetected Best")
-                return True, self.left_line.best_fit, self.right_line.best_fit
+                return self.left_line.best_fit, self.right_line.best_fit
         else:
             print("Both Confidence")
             pass
@@ -333,9 +351,15 @@ class Lane():
         if len(self.distance_queue) > 0:
             lane_space = np.mean(self.distance_queue, axis=0)
         else:
-            lane_space = [600, 600, 600, 650]
-        bad_current_margin = [150,250,350,80]
-        good_current_margin = [100, 150, 250, 80]
+            lane_space = np.array([600, 600, 600, 650])
+        bad_current_margin = np.array([150,250,350,80])
+        good_current_margin = np.array([100, 140, 180, 80])
+
+        if self.left_line.detected and self.right_line.detected:
+            factor_c = abs(self.left_line.current_fit[2] - self.right_line.current_fit[2])
+            delta = abs(factor_c-650)
+            print('Delta: ', delta)
+            good_current_margin = good_current_margin + delta
 
         left_fit = left_line.best_fit
         right_fit = right_line.best_fit
@@ -346,14 +370,16 @@ class Lane():
         lane_best_distance = right_fitx - left_fitx
         lane_best_distance = np.append(lane_best_distance, best_middle)
 
-        if left_line.detected:
-            left_fit = left_line.current_fit
-        else:
-            left_fit = left_line.best_fit
-        if right_line.detected:
-            right_fit = right_line.current_fit
-        else:
-            right_fit = right_line.best_fit
+        # if left_line.detected:
+        #     left_fit = left_line.current_fit
+        # else:
+        #     left_fit = self.left_fit * 0.5 + left_line.current_fit * 0.5
+        # if right_line.detected:
+        #     right_fit = right_line.current_fit
+        # else:
+        #     right_fit = self.right_fit * 0.5 + right_line.current_fit * 0.5
+        left_fit = left_line.current_fit
+        right_fit = right_line.current_fit
 
         left_fitx = left_fit[0] * valid_y ** 2 + left_fit[1] * valid_y + left_fit[2]
         right_fitx = right_fit[0] * valid_y ** 2 + right_fit[1] * valid_y + right_fit[2]
@@ -379,6 +405,7 @@ class Lane():
                 break
             elif abs(distance - lane_space[i]) > good_current_margin[i]:
                 abandon_good_current_fit = True
+                break
             else:
                 continue
 
@@ -386,38 +413,42 @@ class Lane():
             print("FIT: Default fit")
             left_fit = self.left_fit
             right_fit = self.right_fit
+            self.left_line.last_fit = left_fit
+            self.right_line.last_fit = right_fit
             self.redetect_cnt += 1
             self.distance_queue.append(lane_best_distance * 0.7 + np.array([600, 600, 600, 650]) * 0.3)
         elif abandon_good_current_fit:
             print("FIT: Best fit")
             left_fit = left_line.best_fit
             right_fit = right_line.best_fit
-            # self.left_line.last_fit = self.left_line.best_fit
-            # self.right_line.last_fit = self.right_line.best_fit
-            # self.redetect_cnt += 1
+            self.left_line.last_fit = self.left_line.best_fit
+            self.right_line.last_fit = self.right_line.best_fit
+            self.redetect_cnt += 1
             self.distance_queue.append(lane_distance)
         else:
-            factor = 0.2
+            factor = 0.7
             print("FIT: Curr fit")
             if self.left_line.detected:
                 self.left_line.store_current_fit()
             else:
+                # self.left_line.last_fit = self.left_fit
                 self.left_line.last_fit = self.left_line.last_fit * (1 - factor) \
                                           + self.left_line.current_fit * factor
             if self.right_line.detected:
                 self.right_line.store_current_fit()
             else:
+                # self.right_line.last_fit = self.right_fit
                 self.right_line.last_fit = self.right_line.last_fit * (1 - factor) \
                                            + self.right_line.current_fit * factor
             if self.redetect_cnt > 0:
                 self.redetect_cnt -= 1
             self.distance_queue.append(lane_current_distance)
 
-        return left_fit, right_fit
+        return True, left_fit, right_fit
 
     def fit_smoothing(self, left_line, right_line):
         try:
-            left_fit, right_fit = self.valid_both_lanes(left_line, right_line)
+            ret, left_fit, right_fit = self.valid_both_lanes(left_line, right_line)
         except:
             left_fit = self.left_fit
             right_fit = self.right_fit

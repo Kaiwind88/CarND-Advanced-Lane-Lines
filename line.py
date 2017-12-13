@@ -7,6 +7,7 @@ import pickle
 import os.path
 from enum import Enum
 from collections import deque
+from preprocess import *
 
 # Define a class to receive the characteristics of each line detection
 class Line():
@@ -29,6 +30,7 @@ class Line():
         self.line_base_pos = None
         # difference in fit coefficients between last and new fits
         self.diffs = np.array([0,0,0], dtype='float')
+        self.last_diffs = self.diffs
         # x values for detected line pixels
         self.allx = None
         # y values for detected line pixels
@@ -51,6 +53,7 @@ class Line():
         try:
             x_values = np.hstack(self.recent_xfitted)
             self.bestx = np.mean(x_values, axis=0, dtype=np.float32)
+            print("bestx: {:>.2f}".format(self.bestx))
             return self.bestx
         except ValueError:
             return None
@@ -81,7 +84,6 @@ class Line():
         except TypeError or ValueError as e:
             print(self.name, self.cal_current_fit.__name__, e)
             return None
-        print(self.name, self.cal_current_fit.__name__, self.current_fit)
         return self.current_fit
 
     def store_current_fit(self):
@@ -92,7 +94,10 @@ class Line():
             # x = np.concatenate(self.recent_xfitted, axis=0)
             # y = np.concatenate(self.recent_yfitted, axis=0)
             # self.best_fit = np.polyfit(y, x, 2)
-            self.last_fit = self.current_fit
+            # if self.best_fit is not None:
+            #     self.last_fit = self.best_fit * 0.5 + self.current_fit * 0.5
+            # else:
+            #     self.last_fit = self.current_fit
             self.fit_deque.append(self.current_fit)
 
     def cal_radius_of_curvature(self):
@@ -100,27 +105,32 @@ class Line():
         xm_per_pix = 3.7 / 700  # meters per pixel in x dimension
         y_eval = np.max(self.ally)
         try:
-            x = np.concatenate(self.recent_xfitted, axis=0)
-            y = np.concatenate(self.recent_yfitted, axis=0)
+            # x = np.concatenate(self.recent_xfitted, axis=0)
+            # y = np.concatenate(self.recent_yfitted, axis=0)
+            x = self.allx
+            y = self.ally
             # Fit new polynomials to x,y in world space
             fit_cr = np.polyfit(y * ym_per_pix, x * xm_per_pix, 2)
             # Calculate the new radii of curvature
-            self.radius_of_curvature = ((1 + (2 * fit_cr[0] * y_eval * ym_per_pix + fit_cr[1]) ** 2) ** 1.5) \
+            curve = ((1 + (2 * fit_cr[0] * y_eval * ym_per_pix + fit_cr[1]) ** 2) ** 1.5) \
                                        / abs(2 * fit_cr[0])
         except:
             print(self.name, self.cal_radius_of_curvature.__name__)
             return self.radius_of_curvature
-        self.curvature_deque.append(self.radius_of_curvature)
-        curve = np.mean(self.curvature_deque, dtype=np.float32)
-        return curve
+
+        self.curvature_deque.append(curve)
+        self.radius_of_curvature = np.mean(self.curvature_deque, dtype=np.float32)
+        return self.radius_of_curvature
 
     def cal_diff(self):
         try:
             print(self.name, "last fit", self.last_fit)
+            self.last_diffs = self.diffs
             self.diffs = np.array(self.current_fit) - self.last_fit
             return self.diffs
         except:
             print(self.name, self.cal_diff.__name__, "diff failed")
+            self.last_fit = self.current_fit
             return None
 
     def set_allx(self, x):
@@ -137,26 +147,35 @@ class Line():
         except TypeError:
             return None
 
-
     def valid_xy(self, x, y, fit_thresh=(1e-2, 3e-1, 2e2)):
         try:
             curve = abs(np.mean(self.curvature_deque, dtype=np.float32))
             factor = 1.0
             fit_thresh = np.array(fit_thresh)
             if curve < 200:
-                factor = 2
+                factor = 3
             elif curve < 400:
-                factor = 1.8
+                factor = 2.5
             elif curve < 500:
-                factor = 1.5
+                factor = 2.4
+            elif curve < 600:
+                factor = 2.3
+            elif curve < 700:
+                factor = 2.2
+            elif curve < 800:
+                factor = 2.0
             elif curve < 1000:
+                factor = 1.5
+            elif curve < 2000:
+                factor = 1.3
+            elif curve < 3000:
                 factor = 1.2
             elif curve < 5000:
                 factor = 1.1
             elif curve < 10000:
-                factor = 0.8
+                factor = 1.0
             else:
-                factor = 0.6
+                factor = 0.9
             fit_thresh = fit_thresh * factor
             print("Fit_Thresh: ", fit_thresh, curve, factor)
         except:
@@ -172,18 +191,30 @@ class Line():
             self.detected = True
             self.store_current_fit()
             return True
-        if abs(fit_diff[0]) > fit_thresh[0] \
-                or abs(fit_diff[1]) > fit_thresh[1] \
-                or abs(fit_diff[2]) > fit_thresh[2]:
+
+        thresh_logic = abs(fit_diff[0]) > fit_thresh[0] or abs(fit_diff[1]) > fit_thresh[1] or abs(fit_diff[2]) > fit_thresh[2]
+        diffs_logic = (abs(fit_diff[0] - self.last_diffs[0]) > 0.001 or \
+                      abs(fit_diff[1] - self.last_diffs[1]) > 0.8) or \
+                      abs(fit_diff[2] - self.last_diffs[2]) > 2 * abs(self.last_diffs[2])
+        abs_logic = abs(self.last_diffs[0]) < abs(fit_diff[0]) and \
+                    abs(self.last_diffs[1]) < abs(fit_diff[1]) and \
+                    abs(self.last_diffs[2]) < abs(fit_diff[2])
+
+        print(self.name, thresh_logic, diffs_logic, abs_logic)
+        print(self.name, "last:{:>10.5f} {:>10.5f} {:>10.5f}:".format(self.last_diffs[0], self.last_diffs[1], self.last_diffs[2]))
+        print(self.name, "diff:{:>10.5f} {:>10.5f} {:>10.5f}:".format(fit_diff[0], fit_diff[1], fit_diff[2]))
+        gap = abs(fit_diff - self.last_diffs)
+        print(self.name, "gap:{:>10.5f} {:>10.5f} {:>10.5f}:".format(gap[0], gap[1], gap[2]))
+        if thresh_logic or (diffs_logic and abs_logic):
             self.unvalid_cnt += 1
             print(self.name, 'Abandon', "diff:{:>10.5f} {:>10.5f} {:>10.5f} {:>10.5f}:".\
                   format(fit_diff[0], fit_diff[1], fit_diff[2], len(self.allx)))
             self.detected = False
+            breakpoint(True)
             # self.last_fit = self.current_fit * 0.8 + self.best_fit * 0.2
             # self.current_fit = self.last_fit
             return False
         else:
-            print(self.name, "diff:{:>10.5f} {:>10.5f} {:>10.5f}:".format(fit_diff[0], fit_diff[1], fit_diff[2]))
             self.detected = True
             # self.store_current_fit()
             if self.unvalid_cnt > 0:
