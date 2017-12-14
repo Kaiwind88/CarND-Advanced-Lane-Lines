@@ -9,6 +9,21 @@ from enum import Enum
 from collections import deque
 from preprocess import *
 
+class PID():
+    def __init__(self, target, I=0.2):
+        self.Ki = I
+        self.error = 0
+        self.target = target
+    def update(self, value):
+        self.error = self.target - value
+        I_val = self.Ki * self.error
+        return value + I_val
+
+    def set_target(self, target):
+        self.target = target
+
+
+
 # Define a class to receive the characteristics of each line detection
 class Line():
     queue_len = 10
@@ -35,7 +50,8 @@ class Line():
         self.allx = None
         # y values for detected line pixels
         self.ally = None
-
+        self.th_scale = 1
+        self.th_pid = PID(self.th_scale)
         self.unvalid_cnt = 0
         self.name = name
 
@@ -43,7 +59,7 @@ class Line():
         self.fit_deque = deque(maxlen=self.queue_len)
         self.n_x_deque = deque(maxlen=self.queue_len)       # weight
         self.last_fit = None
-        self.last_fit_cnt = 0
+        self.fit_cnt = 10
 
 
     def is_detected(self):
@@ -125,6 +141,7 @@ class Line():
     def cal_diff(self):
         try:
             print(self.name, "last fit", self.last_fit)
+            print(self.name, 'curr fit', self.current_fit)
             self.last_diffs = self.diffs
             self.diffs = np.array(self.current_fit) - self.last_fit
             return self.diffs
@@ -147,13 +164,21 @@ class Line():
         except TypeError:
             return None
 
-    def valid_xy(self, x, y, fit_thresh=(1e-2, 3e-1, 2e2)):
+    def valid_xy(self, x, y, fit_thresh=(1e-2, 3e-1, 1e2)):
+        self.th_scale = self.th_pid.update(self.th_scale)
+        # print(self.name, "Th Scale: ", self.th_scale)
         try:
             curve = abs(np.mean(self.curvature_deque, dtype=np.float32))
             factor = 1.0
             fit_thresh = np.array(fit_thresh)
-            if curve < 200:
+            if curve < 50:
+                factor = 5
+            elif curve < 100:
+                factor = 4
+            elif curve < 150:
                 factor = 3
+            elif curve < 200:
+                factor = 2
             elif curve < 400:
                 factor = 2.5
             elif curve < 500:
@@ -176,7 +201,7 @@ class Line():
                 factor = 1.0
             else:
                 factor = 0.9
-            fit_thresh = fit_thresh * factor
+            fit_thresh = fit_thresh * factor * self.th_scale
             print("Fit_Thresh: ", fit_thresh, curve, factor)
         except:
             print('curve miss')
@@ -193,9 +218,15 @@ class Line():
             return True
 
         thresh_logic = abs(fit_diff[0]) > fit_thresh[0] or abs(fit_diff[1]) > fit_thresh[1] or abs(fit_diff[2]) > fit_thresh[2]
-        diffs_logic = (abs(fit_diff[0] - self.last_diffs[0]) > 0.001 or \
-                      abs(fit_diff[1] - self.last_diffs[1]) > 0.8) or \
-                      abs(fit_diff[2] - self.last_diffs[2]) > 2 * abs(self.last_diffs[2])
+        # diffs_logic = (abs(fit_diff[0] - self.last_diffs[0]) > 0.0005 or \
+        #               abs(fit_diff[1] - self.last_diffs[1]) > 0.25) or \
+        #               abs(fit_diff[2] - self.last_diffs[2]) > 2 * abs(self.last_diffs[2])
+
+        diffs_logic = (abs(fit_diff[0] - self.last_diffs[0]) > self.th_scale * max((min((abs(fit_diff[0]), abs(self.last_diffs[0]))), 0.00015)) or \
+                      abs(fit_diff[1] - self.last_diffs[1]) > self.th_scale * max((min((abs(fit_diff[1]), abs(self.last_diffs[1]))), 0.15)) ) or \
+                     abs(fit_diff[2] - self.last_diffs[2]) > self.th_scale * max((min((abs(fit_diff[2]), abs(self.last_diffs[2]))), 100))
+
+
         abs_logic = abs(self.last_diffs[0]) < abs(fit_diff[0]) and \
                     abs(self.last_diffs[1]) < abs(fit_diff[1]) and \
                     abs(self.last_diffs[2]) < abs(fit_diff[2])
@@ -205,20 +236,26 @@ class Line():
         print(self.name, "diff:{:>10.5f} {:>10.5f} {:>10.5f}:".format(fit_diff[0], fit_diff[1], fit_diff[2]))
         gap = abs(fit_diff - self.last_diffs)
         print(self.name, "gap:{:>10.5f} {:>10.5f} {:>10.5f}:".format(gap[0], gap[1], gap[2]))
-        if thresh_logic or (diffs_logic and abs_logic):
+        if thresh_logic or diffs_logic:
             self.unvalid_cnt += 1
             print(self.name, 'Abandon', "diff:{:>10.5f} {:>10.5f} {:>10.5f} {:>10.5f}:".\
                   format(fit_diff[0], fit_diff[1], fit_diff[2], len(self.allx)))
             self.detected = False
             breakpoint(True)
+            self.th_pid.target += 2
             # self.last_fit = self.current_fit * 0.8 + self.best_fit * 0.2
             # self.current_fit = self.last_fit
+            if self.fit_cnt > 0:
+                self.fit_cnt -= 1
             return False
         else:
             self.detected = True
             # self.store_current_fit()
             if self.unvalid_cnt > 0:
                 self.unvalid_cnt -= 1
+            self.fit_cnt += 1
+            if self.th_pid.target > 2:
+                self.th_pid.target = np.floor(self.th_pid.target - 1)
             return True
 
     def clean_deque(self):
@@ -229,8 +266,9 @@ class Line():
         self.curvature_deque.clear()
 
     def re_detected(self):
-        if self.unvalid_cnt > self.queue_len // 2:
-            self.unvalid_cnt -= 1
+        if self.unvalid_cnt > self.queue_len:
+            self.unvalid_cnt = 0
+            self.fit_cnt = 0
             print(self.name, self.re_detected.__name__)
             # last_fit = self.fit_deque[-1]
             # if len(self.fit_deque) > 0:

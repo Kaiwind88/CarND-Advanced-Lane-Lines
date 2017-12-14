@@ -12,8 +12,16 @@ from preprocess import *
 load_data()
 mtx = parameters['mtx']
 dist = parameters['dist']
-M = parameters['M']
-MInv = parameters['MInv']
+
+M_max = parameters['M_max']
+MInv_max = parameters['MInv_max']
+M_mid = parameters['M_mid']
+MInv_mid = parameters['MInv_mid']
+M_min = parameters['M_min']
+MInv_min = parameters['MInv_min']
+
+M = M_max
+MInv = MInv_max
 parameters['p'] = True
 # img = cv2.imread('./test_images/straight_lines1.jpg')
 # # img = cv2.imread('./camera_cal/calibration8.jpg')
@@ -38,19 +46,25 @@ parameters['p'] = True
 
 # show_processed_images(image_dict)
 
+f1 = 'project_video.mp4'
+f2 = 'challenge_video.mp4'
+f3 = 'harder_challenge_video.mp4'
+input_file = f3
+if input_file == f3:
+    parameters['M'] = M_mid
+    parameters['MInv'] = MInv_mid
+else:
+    parameters['M'] = M_max
+    parameters['MInv'] = MInv_max
 
-lane = Lane(MInv)
-
-w_name = 'image'
+lane = Lane(parameters)
+w_name = input_file
 cv2.namedWindow(w_name, cv2.WINDOW_AUTOSIZE)
-# cap = cv2.VideoCapture('project_video.mp4')
-# cap = cv2.VideoCapture('challenge_video.mp4')
-cap = cv2.VideoCapture('harder_challenge_video.mp4')
-# cap = cv2.VideoCapture('saveVideo.avi')
+cap = cv2.VideoCapture(input_file)
 
-def nothing(x):
+def progress_bar_cb(x):
     cap.set(cv2.CAP_PROP_POS_FRAMES, x)
-cv2.createTrackbar('Frame',w_name,0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),nothing)
+cv2.createTrackbar('Frame',w_name,0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),progress_bar_cb)
 
 delay = 1
 while(cap.isOpened()):
@@ -70,49 +84,8 @@ while(cap.isOpened()):
         if not ret:
             continue
     print("--------current frame:", frame_idx)
-    orig = frame
-    # gray = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
-    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    # equ_img = clahe.apply(gray)
-    # orig = cv2.cvtColor(equ_img, cv2.COLOR_GRAY2BGR)
-    # print(orig.shape)
 
-
-    undist_img, wy_img, gray, color, combined, unwarp_img, edge, undist_img_enhance= pipline(orig, parameters)
-    scale = 0.3
-
-    resize_shape = (int(orig.shape[1]*scale), int(orig.shape[0]*scale))
-
-    # print("unwarped", unwarped.shape, combined.shape)
-    fit_lane_img = lane.fit_lane(unwarp_img)
-    # fit_lane_img = find_lane_cnn(unwarp_img)
-    # unwarped_img = unwarped
-    offset, left_bestx, right_bestx, left_curverad, right_curverad = lane.get_lane_prop()
-
-    parameters['left_curverad'] = left_curverad if left_curverad is not None else 0
-    parameters['right_curverad'] = right_curverad if right_curverad is not None else 0
-
-    project = lane.project_back(undist_img)
-    unwarp_project = unwarp(project, M, mtx, dist)
-    show_text(project, parameters)
-    if project is None:
-        continue
-
-    resize_project_img = resize_image(project, resize_shape, 'Project')
-    resize_color_img = resize_image(wy_img, resize_shape, 'Y & W')
-    resize_combined_img = resize_image(combined, resize_shape, 'Combined')
-    resize_unwarped_img = resize_image(unwarp_img, resize_shape, 'unwrap img')
-    resize_hls_img = resize_image(gray, resize_shape, 'hls')
-    resize_rgb_img = resize_image(undist_img_enhance, resize_shape, 'undist_img_enhance')
-    resize_color_unwarped = resize_image(unwarp_project, resize_shape, 'project_unwarped')
-    resize_undist_img = resize_image(undist_img, resize_shape, 'undist')
-    resize_fit_lane_img = resize_image(fit_lane_img, resize_shape, 'fit lane')
-    resize_edge_img = resize_image(edge, resize_shape, 'edge')
-
-    # print(resize_color_img.shape, resize_unwarped_img.shape, resize_project_img.shape, resize_combined_img.shape)
-    final_img = np.vstack((np.hstack((resize_color_img, resize_color_unwarped, resize_rgb_img)), \
-                           np.hstack((resize_combined_img, resize_unwarped_img, resize_undist_img)),
-                           np.hstack((resize_project_img, resize_edge_img, resize_fit_lane_img))))
+    final_img = lane.lane_detection(frame)
     cv2.imshow(w_name, final_img)
 
 cap.release()

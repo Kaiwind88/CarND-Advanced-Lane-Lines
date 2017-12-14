@@ -44,13 +44,19 @@ parameters = {
     'r': True,
     'mtx': None,
     'dist': None,
+    'M_max': None,
+    'MInv_max': None,
+    'M_mid': None,
+    'MInv_mid': None,
+    'M_min': None,
+    'MInv_min': None,
     'M': None,
     'MInv': None,
     'left_curverad': 0,
     'right_curverad': 0,
     'config-option': 0,
     'brightness': 0,
-    'use_color': True
+    'use_color': False
 }
 
 
@@ -78,11 +84,15 @@ def load_data():
         images = glob.glob('./camera_cal/calibration*.jpg')
         mtx, dist = calibration(images, nx, ny)
         img = cv2.imread('./test_images/straight_lines1.jpg')
-        M, MInv = transform(img, nx, ny, mtx, dist)
+        M_max, MInv_max, M_mid, MInv_mid, M_min, MInv_min= transform(img, nx, ny, mtx, dist)
         parameters['mtx'] = mtx
         parameters['dist'] = dist
-        parameters['M'] = M
-        parameters['MInv'] = MInv
+        parameters['M_max'] = M_max
+        parameters['MInv_max'] = MInv_max
+        parameters['M_mid'] = M_mid
+        parameters['MInv_mid'] = MInv_mid
+        parameters['M_min'] = M_min
+        parameters['MInv_min'] = MInv_min
 
         with open(pickle_file, 'wb') as f:
             pickle.dump(parameters, f, pickle.HIGHEST_PROTOCOL)
@@ -178,17 +188,17 @@ def region_of_interest(img):
 def filter_yellow_white_color(img):
     img_cov = cv2.cvtColor(img, cv2.COLOR_BGR2HLS_FULL)
 
-    # No 1
-    # y_upper = np.array([40, 255, 255])
-    # y_lower = np.array([0, 100, 100])
-    # w_upper = np.array([255, 255, 255])
-    # w_lower = np.array([0, 200, 0])
-
-    # No 2
-    y_upper = np.array([80, 255, 255])
-    y_lower = np.array([0, 10, 20])
-    w_upper = np.array([255, 255, 255])
-    w_lower = np.array([0, 130, 0])
+    if parameters['use_color']:
+        y_upper = np.array([80, 255, 255])
+        y_lower = np.array([0, 10, 20])
+        w_upper = np.array([255, 255, 255])
+        w_lower = np.array([0, 195, 0])
+    else:
+        # No 2
+        y_upper = np.array([80, 255, 255])
+        y_lower = np.array([0, 10, 20])
+        w_upper = np.array([255, 255, 255])
+        w_lower = np.array([0, 130, 0])
 
     y_img_mask = cv2.inRange(img_cov, y_lower, y_upper)
     w_img_mask = cv2.inRange(img_cov, w_lower, w_upper)
@@ -384,7 +394,6 @@ def gaussian_blur(img, kernel_size):
 from collections import deque
 bright_deque = deque(maxlen=5)
 def adjust_parameter(parameters=parameters):
-    return
     brightness = np.mean(bright_deque)
     if brightness >= 20 and brightness <= 50:
         ch = 2 #hls -> s
@@ -409,50 +418,8 @@ def adjust_parameter(parameters=parameters):
     b_min = int(brightness + b_factor)
     parameters['rgbthresh'][2][0] = b_min if b_min < 230 else 230
 
-def yellow(img, parameters):
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
-    img = hsv[:,:,2]
-
-    kernel = np.ones((3, 3), np.uint8)
-    # Step 1: undistort
-    sw = parameters['u']
-    mtx = parameters['mtx']
-    dist = parameters['dist']
-    undist_img = cal_undistort(img, mtx, dist) if sw else img
-
-
-    M = parameters['M']
-    mtx = parameters['mtx']
-    dist = parameters['dist']
-    unwarp_img = unwarp(undist_img, M, mtx, dist)
-
-    # gray = cv2.dilate(unwarp_img, kernel, iterations=1)
-    gray = unwarp_img
-    gray = gaussian_blur(gray, 15)
-    # Step 2: xsobel
-    thresh = parameters['xthresh']
-    ksize = parameters['xksize']
-    sw = parameters['x']
-    xsobel = abs_sobel_thresh(gray, orient='x', sobel_kernel=1, thresh=thresh)\
-        if sw else np.zeros_like(gray)
-    xsobel = cv2.dilate(xsobel, kernel, iterations = 1)
-    # Step 3: ysobel
-    thresh = parameters['ythresh']
-    ksize = parameters['yksize']
-    sw = parameters['y']
-    ysobel = abs_sobel_thresh(gray, orient='y', sobel_kernel=1, thresh=thresh)\
-        if sw else np.zeros_like(gray)
-    ysobel = cv2.dilate(ysobel, kernel, iterations = 1)
-
-    combined = np.zeros_like(gray)
-    # combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1)))] = 1
-    combined[((xsobel == 1) & (ysobel == 1))] = 1
-    # combined = gaussian_blur(combined, 5)
-
-    return combined
-
 def otsu(img):
-    blur = cv2.GaussianBlur(img, (5, 5), 0)
+    blur = cv2.GaussianBlur(img, (15, 15), 0)
     ret, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     # plot all the images and their histograms
     return th
@@ -470,8 +437,8 @@ def enhance_img(img):
 def use_color(use):
     parameters['use_color'] = use
 
-def pipline(img, parameters):
-    kernel = np.ones((5, 5), np.uint8)
+def pipline(img, M, parameters=parameters):
+    kernel = np.ones((1, 1), np.uint8)
     # Step 1: undistort
     sw = parameters['u']
     mtx = parameters['mtx']
@@ -482,7 +449,6 @@ def pipline(img, parameters):
     bright_deque.append(parameters['brightness'])
     adjust_parameter()
     # Step 2: transform
-    M = parameters['M']
     mtx = parameters['mtx']
     dist = parameters['dist']
     # unwarp_img = unwarp(undist_img, M, mtx, dist)
@@ -500,8 +466,8 @@ def pipline(img, parameters):
 
     color = np.zeros_like(rgb_img)
     color[(rgb_img == 1) | (hls_img == 1)] = 1
-
-    # color_erode = cv2.morphologyEx(color, cv2.MORPH_CLOSE, kernel)
+    # color = cv2.medianBlur(color, 5)
+    color = cv2.dilate(color, kernel, iterations=1)
 
     zero_img = np.zeros_like(gray)
     # Step 2: xsobel
@@ -555,7 +521,7 @@ def pipline(img, parameters):
     cv2.imshow("a", resize_image(rgb_img, resize_shape, 'rgb_img'))
     cv2.imshow('b', resize_image(hls_img, resize_shape, 'hls_img'))
 
-    return undist_img, wy_img, gray, color, combined, unwarp_img, edge, undist_img_enhance
+    return unwarp_img, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance
 
 # def enum(*sequential):
 #     enums = dict(zip(sequential, range(len(sequential))))
@@ -631,6 +597,9 @@ def key_handler(delay, parameters):
         key_handler.arrow_key_state = key_state.ignore
     elif key == ord('b'):
         parameters['b'] = not parameters['b']
+        key_handler.arrow_key_state = key_state.ignore
+    elif key == ord('C'):
+        parameters['use_color'] = not parameters['use_color']
         key_handler.arrow_key_state = key_state.ignore
     elif key in arrow_key_code.values():
         if key_handler.arrow_key_state.value != key_state.ignore.value:
@@ -753,28 +722,35 @@ def show_processed_images(image_dict):
     plt.show()
 
 def transform(img, nx, ny, mtx, dist):
+    src = np.float32([[410, 560], [850, 560], [1110, 719.5], [200, 719.5]]) # (lt,rt,rb,lb)
+    dst = np.float32([[320, 0.5], [960, 0.5], [960, 700], [320, 700]])
+
+    M_min = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
+    MInv_min = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
+
+
     src = np.float32([[480, 500], [740, 500], [1110, 719.5], [200, 719.5]]) # (lt,rt,rb,lb)
     dst = np.float32([[320, 0.5], [960, 0.5], [960, 700], [320, 700]])
 
-    # src = np.float32([[410, 560], [850, 560], [1110, 719.5], [200, 719.5]]) # (lt,rt,rb,lb)
-    # dst = np.float32([[320, 0.5], [960, 0.5], [960, 700], [320, 700]])
+    M_mid = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
+    MInv_mid = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
 
     # src = np.float32([[579, 460], [704, 460], [1110, 719.5], [200, 719.5]])
     # dst = np.float32([[320, 0.5], [960, 0.5], [960, 719.5], [320, 719.5]])
-    # img_size = (img.shape[1], img.shape[0])
-    # src = np.float32(
-    #     [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
-    #      [((img_size[0] / 6) - 10), img_size[1]],
-    #      [(img_size[0] * 5 / 6) + 60, img_size[1]],
-    #      [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
-    # dst = np.float32(
-    #     [[(img_size[0] / 4), 0],
-    #      [(img_size[0] / 4), img_size[1]],
-    #      [(img_size[0] * 3 / 4), img_size[1]],
-    #      [(img_size[0] * 3 / 4), 0]])
-    M = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
-    MInv = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
-    return M, MInv
+    img_size = (img.shape[1], img.shape[0])
+    src = np.float32(
+        [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
+         [((img_size[0] / 6) - 10), img_size[1]],
+         [(img_size[0] * 5 / 6) + 60, img_size[1]],
+         [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
+    dst = np.float32(
+        [[(img_size[0] / 4), 0],
+         [(img_size[0] / 4), img_size[1]],
+         [(img_size[0] * 3 / 4), img_size[1]],
+         [(img_size[0] * 3 / 4), 0]])
+    M_max = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
+    MInv_max = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
+    return M_max, MInv_max, M_mid, MInv_mid, M_min, MInv_min
 
 def resize_image(img, shape, title = ''):
     if len(img.shape) == 3:
