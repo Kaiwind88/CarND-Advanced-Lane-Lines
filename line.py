@@ -1,12 +1,3 @@
-import numpy as np
-import cv2
-
-from math import *
-import matplotlib.pyplot as plt
-import pickle
-import os.path
-from enum import Enum
-from collections import deque
 from preprocess import *
 
 class PID():
@@ -167,8 +158,11 @@ class Line():
         self.th_scale = self.th_pid.update(self.th_scale)
         # print(self.name, "Th Scale: ", self.th_scale)
         try:
-            curve = abs(np.mean(self.curvature_deque, dtype=np.float32))
-            factor = 1.0
+            if len(self.curvature_deque) > 0:
+                curve = abs(np.mean(self.curvature_deque, dtype=np.float32))
+            else:
+                curve = 10000
+
             fit_thresh = np.array(fit_thresh)
             if curve < 50: factor = 5
             elif curve < 100: factor = 4
@@ -238,8 +232,8 @@ class Line():
             if self.unvalid_cnt > 0:
                 self.unvalid_cnt -= 1
             self.fit_cnt += 1
-            if self.th_pid.target > 2:
-                self.th_pid.target = np.floor(self.th_pid.target - 1)
+            if self.th_pid.target > 1.9:
+                self.th_pid.target = max((np.floor(self.th_pid.target - 1), 0.5))
             return True
 
     def clean_deque(self):
@@ -253,6 +247,7 @@ class Line():
         if self.unvalid_cnt > self.queue_len//3:
             self.unvalid_cnt = 0
             self.fit_cnt = 0
+            self.th_pid.target = 1
             print(self.name, self.re_detected.__name__)
             # last_fit = self.fit_deque[-1]
             # if len(self.fit_deque) > 0:

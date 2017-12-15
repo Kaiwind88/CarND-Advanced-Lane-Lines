@@ -56,7 +56,9 @@ parameters = {
     'right_curverad': 0,
     'config-option': 0,
     'brightness': 0,
-    'use_color': False
+    'use_color': False,
+    'color_sw': True,
+    'margin': 40
 }
 
 

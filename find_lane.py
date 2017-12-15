@@ -16,7 +16,7 @@ class Lane():
         self.redetect_cnt = -1
         self.M = parameters['M']
         self.MInv = parameters['MInv']
-        self.margin = 55
+        self.margin = parameters['margin']
         self.left_fit = None
         self.right_fit = None
         self.offset = None
@@ -25,7 +25,7 @@ class Lane():
         self.left_radius_of_curvature = None
         self.right_radius_of_curvature = None
         self.valid_both_lanes_cnt = 0
-        self.minpix = 150
+        self.minpix = 100
         self.left_confidence = True
         self.right_confidence = True
         self.distance_queue = deque(maxlen=10)
@@ -236,10 +236,13 @@ class Lane():
             self.right_confidence = False
             self.left_line.last_fit = self.left_line.best_fit
             self.right_line.last_fit = self.right_line.best_fit
-            if parameters['brightness'] > 90:
+            if parameters['color_sw']:
                 use_color(True)
             else:
-                use_color(False)
+                if parameters['brightness'] > 90:
+                    use_color(True)
+                else:
+                    use_color(False)
             print('fit_lane redetect')
             # self.distance_queue.clear()
             if not self.find_lane():
@@ -329,8 +332,8 @@ class Lane():
                 # self.right_fit = right_line.current_fit
                 self.distance_queue.clear()
             else:
-                left_line.last_fit = self.left_line.best_fit
-                right_line.last_fit = self.right_line.best_fit
+                left_line.last_fit = left_line.best_fit
+                right_line.last_fit = right_line.best_fit
 
             return 1
 
@@ -448,7 +451,7 @@ class Lane():
         #     abandon_best_fit = True
 
         mid = lane_current_distance[1]
-        margin = 100
+        margin = 50
         if (lane_current_distance[0]-mid > margin) and \
                     (lane_current_distance[2]-mid > margin):
             abandon_current_fit = True
@@ -675,7 +678,7 @@ def find_lane(img, m, v):
         v.redetect = True
         m.using_min_M = True
         m.fit_well = 0
-    if m.using_min_M:
+    if m.using_min_M and not parameters['color_sw']:
         v.M = parameters['M_min']
         v.MInv = parameters['MInv_min']
         obj = v
