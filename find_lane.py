@@ -16,7 +16,7 @@ class Lane():
         self.redetect_cnt = -1
         self.M = parameters['M']
         self.MInv = parameters['MInv']
-        self.margin = 40
+        self.margin = 55
         self.left_fit = None
         self.right_fit = None
         self.offset = None
@@ -25,12 +25,13 @@ class Lane():
         self.left_radius_of_curvature = None
         self.right_radius_of_curvature = None
         self.valid_both_lanes_cnt = 0
-        self.minpix = 100
+        self.minpix = 150
         self.left_confidence = True
         self.right_confidence = True
         self.distance_queue = deque(maxlen=10)
         self.use_color = True
         self.using_min_M = False
+        self.fit_well = 0
 
     def find_lane(self):
         # Assuming you have created a warped binary image called "binary_warped"
@@ -103,6 +104,7 @@ class Lane():
         middle = (np.mean(rightx) + np.mean(leftx)) / 2
         if 100 < abs(650 - middle):
             print("find_lane distance failed:{:>.2f}".format(middle))
+            return False
 
         # Extract left and right line pixel positions
         self.leftx = leftx #nonzerox[left_lane_inds]
@@ -230,10 +232,14 @@ class Lane():
     def fit_lane(self, warped_img):
         self.binary_warped = warped_img
         if self.redetect:
-            # if parameters['brightness'] > 90:
-            #     use_color(True)
-            # else:
-            #     use_color(False)
+            self.left_confidence = False
+            self.right_confidence = False
+            self.left_line.last_fit = self.left_line.best_fit
+            self.right_line.last_fit = self.right_line.best_fit
+            if parameters['brightness'] > 90:
+                use_color(True)
+            else:
+                use_color(False)
             print('fit_lane redetect')
             # self.distance_queue.clear()
             if not self.find_lane():
@@ -267,14 +273,13 @@ class Lane():
             self.left_bestx, self.left_line_base_pos, self.left_radius_of_curvature, _ = self.left_line.fit_xy()
         else:
             if self.left_line.re_detected():
-                self.left_confidence = False
-                self.redetect = True
+                self.redetect_cnt += 1
         if right_val:
             self.right_bestx, self.right_line_base_pos, self.right_radius_of_curvature, _ = self.right_line.fit_xy()
         else:
             if self.right_line.re_detected():
-                self.right_confidence = False
-                self.redetect = True
+                self.redetect_cnt += 1
+
         if left_val and right_val:
             return True
         else:
@@ -299,27 +304,33 @@ class Lane():
         print("Redetect Distance:", lane_current_distance, avg_distance)
         abandon_current_fit = False
         for i, distance in enumerate(lane_current_distance):
-            if distance < 0 or abs(avg_distance - distance) > 100:
+            if distance < 300 or abs(avg_distance - distance) > 100:
                 abandon_current_fit = True
                 break
 
         if abandon_current_fit:
             return 2
         else:
-            self.right_confidence = True
-            self.left_confidence = True
+            if left_line.detected and right_line.detected:
+                left_line.last_fit = left_line.current_fit
+                left_line.store_current_fit()
 
-            if True or self.left_line.detected:
-                self.left_line.last_fit = self.left_line.current_fit
-                self.left_line.store_current_fit()
-            else:
-                self.left_line.last_fit = self.left_fit
+                right_line.last_fit = right_line.current_fit
+                right_line.store_current_fit()
 
-            if True or self.right_line.detected:
-                self.right_line.last_fit = self.right_line.current_fit
-                self.right_line.store_current_fit()
+                self.right_confidence = True
+                self.left_confidence = True
+
+                left_line.clean_deque()
+                right_line.clean_deque()
+                left_line.best_fit = left_line.current_fit
+                right_line.best_fit = right_line.current_fit
+                # self.left_fit = left_line.current_fit
+                # self.right_fit = right_line.current_fit
+                self.distance_queue.clear()
             else:
-                self.right_line.last_fit = self.right_fit
+                left_line.last_fit = self.left_line.best_fit
+                right_line.last_fit = self.right_line.best_fit
 
             return 1
 
@@ -330,15 +341,15 @@ class Lane():
             breakpoint(ret > 0)
             if ret == 1:
                 print("Fit: Redetected Current")
-                return left_line.current_fit, right_line.current_fit
-                # if left_line.detected and right_line.detected:
-                #     return left_line.current_fit, right_line.current_fit
-                # elif left_line.detected:
-                #     return left_line.current_fit, self.right_fit
-                # elif right_line.detected:
-                #     return self.left_fit, right_line.current_fit
-                # else:
-                #     return self.left_fit, self.right_fit
+                # return left_line.current_fit, right_line.current_fit
+                if left_line.detected and right_line.detected:
+                    return left_line.current_fit, right_line.current_fit
+                elif left_line.detected:
+                    return left_line.current_fit, self.right_fit
+                elif right_line.detected:
+                    return self.left_fit, right_line.current_fit
+                else:
+                    return self.left_fit, self.right_fit
             elif ret == 2:
                 print("Fit: Redetected Defatult")
                 return self.left_fit, self.right_fit
@@ -404,7 +415,7 @@ class Lane():
 
         abandon_best_fit = False
         abandon_current_fit = False
-        # for i, distance in enumerate(lane_distance):
+        # for i, distance in enumerate(lane_best_distance):
         #     if distance < 0 or abs(distance - lane_space[i]) > bad_current_margin[i]:
         #         abandon_best_fit = True
         #         abandon_current_fit = True
@@ -416,16 +427,19 @@ class Lane():
         #         continue
 
 
-        # for i, distance in enumerate(lane_best_distance[:-1]):
-        #     if distance < 0 or abs(distance - avg_best_distance) > 200:
-        #         abandon_bad_current_fit = True
-        #         abandon_good_current_fit = True
-        #         break
-        #     elif abs(distance - avg_best_distance) > 100:
-        #         abandon_good_current_fit = True
-        #         break
-        #     else:
-        #         continue
+        for i, distance in enumerate(lane_current_distance[:-1]):
+            if distance < 0 or abs(distance - avg_current_distance) > 400 or avg_current_distance > 800:
+                abandon_best_fit = True
+                abandon_current_fit = True
+                break
+            elif abs(distance - avg_best_distance) > 300:
+                abandon_current_fit = True
+                break
+            else:
+                continue
+
+        if current_middle + 100 > right_fitx[0] or current_middle - 100 < left_fitx[0]:
+            abandon_current_fit = True
 
         # mid = lane_best_distance[1]
         # margin = 120
@@ -434,11 +448,25 @@ class Lane():
         #     abandon_best_fit = True
 
         mid = lane_current_distance[1]
-        margin = 120
+        margin = 100
         if (lane_current_distance[0]-mid > margin) and \
                     (lane_current_distance[2]-mid > margin):
             abandon_current_fit = True
+        else:
+            for distance in lane_current_distance:
+                if distance < 0:
+                    abandon_current_fit = True
 
+        left_curv = min(self.left_line.radius_of_curvature, 1000)
+        right_curv = min(self.right_line.radius_of_curvature, 1000)
+
+        if left_curv > 5 * right_curv or right_curv > 5 * left_curv:
+            abandon_best_fit = True
+
+        # if (self.left_line.radius_of_curvature > 1000 and self.right_line.radius_of_curvature < 500) or \
+        #         (self.left_line.radius_of_curvature < 500 and self.right_line.radius_of_curvature > 1000):
+        #     if not self.left_line.detected or not self.right_line.detected:
+        #         abandon_best_fit = True
 
 
         # if abandon_best_fit and abandon_current_fit:
@@ -451,66 +479,66 @@ class Lane():
         #     self.distance_queue.append(lane_best_distance * 0.7 + np.array([600, 600, 600, 650]) * 0.3)
         if abandon_best_fit:
             print("FIT: 2 fit")
-            left_fit = left_line.best_fit
-            right_fit = right_line.best_fit
-            left_line.last_fit = left_line.best_fit * 0.9 + left_line.current_fit * 0.1
-            right_line.last_fit = right_line.best_fit * 0.9 + right_line.current_fit * 0.1
+            left_fit = self.left_fit #left_line.best_fit
+            right_fit = self.right_fit #right_line.best_fit
+            # left_line.last_fit = left_line.best_fit
+            # right_line.last_fit = right_line.best_fit
             self.redetect_cnt += 1
+            self.fit_well = 0
             self.distance_queue.append(lane_distance)
         elif abandon_current_fit:
             print("FIT: 3 fit")
             factor = 0.1
-            if left_line.unvalid_cnt < 2 or not left_line.detected:
+            if True or left_line.detected:
                 left_fit = self.left_fit
                 left_line.last_fit = self.left_fit
             else:
-                left_fit = self.left_fit * (1 - factor) + left_line.best_fit * factor
-                left_line.last_fit = left_line.best_fit * (1-factor) + left_line.best_fit * factor
+                left_fit = self.left_fit
+                left_line.last_fit = left_line.best_fit
 
-            if right_line.unvalid_cnt < 2 or not right_line.detected:
+            if True or right_line.detected:
                 right_fit = self.right_fit
                 right_line.last_fit = self.left_fit
             else:
-                right_fit = self.right_fit * (1 - factor) + right_line.best_fit * factor
-                right_line.last_fit = right_line.best_fit * (1-factor) + right_line.best_fit * factor
+                right_fit = self.right_fit
+                right_line.last_fit = right_line.best_fit
             self.redetect_cnt += 1
+            self.fit_well = 0
             self.distance_queue.append(lane_distance)
         else:
             factor = 0.2
             print("FIT: 4 fit")
-            if left_line.detected:
+            if left_line.detected and right_line.detected:
                 if left_line.fit_cnt > 0:
                     left_fit = left_line.current_fit
+                    left_line.store_current_fit()
                 else:
                     left_fit = self.left_fit
                 left_line.last_fit = left_line.current_fit
-                left_line.store_current_fit()
-            else:
-                left_line.last_fit = self.left_fit
-                left_fit = self.left_fit
-                # left_line.last_fit = left_line.last_fit * (1 - factor) \
-                #                           + left_line.current_fit * factor
-            if right_line.detected:
+
                 if right_line.fit_cnt > 0:
                     right_fit = right_line.current_fit
+                    right_line.store_current_fit()
                 else:
                     right_fit = self.right_fit
                 right_line.last_fit = right_line.current_fit
-                right_line.store_current_fit()
             else:
+                left_line.last_fit = self.left_fit
+                left_fit = self.left_fit
                 right_line.last_fit = self.right_fit
                 right_fit = self.right_fit
-                # right_line.last_fit = right_line.last_fit * (1 - factor) \
-                #                            + right_line.current_fit * factor
-            if left_line.detected and right_line.detected and (self.redetect_cnt > 0):
-                self.redetect_cnt -= 1
+
+            if left_line.detected and right_line.detected:
+                if self.redetect_cnt > 0:
+                    self.redetect_cnt -= 1
+                self.fit_well += 1
             self.distance_queue.append(lane_current_distance)
 
-        return True, left_fit, right_fit
+        return left_fit, right_fit
 
     def fit_smoothing(self, left_line, right_line):
         try:
-            ret, left_fit, right_fit = self.valid_both_lanes(left_line, right_line)
+            left_fit, right_fit = self.valid_both_lanes(left_line, right_line)
         except:
             left_fit = self.left_fit
             right_fit = self.right_fit
@@ -519,21 +547,21 @@ class Lane():
 
     def lane_detection(self, img):
         if self.redetect_cnt > 8:
-            self.redetect_cnt = 0
+            self.redetect_cnt -= 1
             self.redetect = True
 
         if self.redetect and (self.redetect_cnt != -1):
             self.left_line.fit_cnt = 0
             self.right_line.fit_cnt = 0
-            self.window_size = 7
+            self.window_size = 20
             self.using_min_M = True
         else:
             if self.redetect_cnt == 0:
                 self.using_min_M = False
 
         if self.using_min_M:
-            # self.M = parameters['M_min']
-            # self.MInv = parameters['MInv_min']
+            self.M = parameters['M_min']
+            self.MInv = parameters['MInv_min']
             if self.window_size > 0:
                 self.window_size -= 1
             else:
@@ -549,27 +577,27 @@ class Lane():
         parameters['left_curverad'] = left_curverad if left_curverad is not None else 0
         parameters['right_curverad'] = right_curverad if right_curverad is not None else 0
 
-        scale = 0.3
+        scale = 0.5
         resize_shape = (int(img.shape[1] * scale), int(img.shape[0] * scale))
         project = self.project_back(undist_img)
         unwarp_project = unwarp(project, self.M, parameters['mtx'], parameters['dist'])
         show_text(project, parameters)
 
-        resize_project_img = resize_image(project, resize_shape, 'Project')
-        resize_color_img = resize_image(wy_img, resize_shape, 'Y & W')
+        resize_project_img = resize_image(project, resize_shape, 'Projected')
+        resize_color_img = resize_image(wy_img, resize_shape, 'Yellow & White')
         resize_combined_img = resize_image(combined, resize_shape, 'Combined')
-        resize_unwarped_img = resize_image(unwarp_img, resize_shape, 'unwrap img')
+        resize_unwarped_img = resize_image(unwarp_img, resize_shape, 'Combined Unwarped')
         resize_enhance_img = resize_image(undist_img_enhance, resize_shape, 'Enhanced')
         resize_color_unwarped = resize_image(unwarp_project, resize_shape, 'Unwarped')
         resize_undist_img = resize_image(undist_img, resize_shape, 'Undist')
         resize_fit_lane_img = resize_image(fit_lane_img, resize_shape, 'Lane')
-        resize_edge_img = resize_image(edge, resize_shape, 'edge')
+        resize_edge_img = resize_image(edge, resize_shape, 'Sobel Edge')
 
-        final_img = np.vstack((np.hstack((resize_color_img, resize_color_unwarped, resize_enhance_img)), \
-                               np.hstack((resize_combined_img, resize_unwarped_img, resize_undist_img)),
-                               np.hstack((resize_project_img, resize_edge_img, resize_fit_lane_img))))
+        final_img = np.vstack((np.hstack((resize_color_img, resize_fit_lane_img, resize_undist_img)), \
+                               np.hstack((resize_combined_img, resize_unwarped_img, resize_enhance_img)),
+                               np.hstack((resize_project_img, resize_color_unwarped, resize_edge_img))))
 
-        return final_img
+        return final_img, project
 
 
 
@@ -633,6 +661,75 @@ class Lane():
 
         # return left_best_fit, right_best_fit
         # return left_line.best_fit, right_line.best_fit
+
+
+def find_lane(img, m, v):
+    if m.redetect_cnt > 3:
+        m.redetect_cnt -= 1
+        m.redetect = True
+
+    if m.redetect and (m.redetect_cnt != -1):
+        m.left_line.fit_cnt = 0
+        m.right_line.fit_cnt = 0
+        v.window_size = 5
+        v.redetect = True
+        m.using_min_M = True
+        m.fit_well = 0
+    if m.using_min_M:
+        v.M = parameters['M_min']
+        v.MInv = parameters['MInv_min']
+        obj = v
+    else:
+        obj = m
+
+    warp_img, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance, rgb_img, hls_img = pipline(img, obj.M)
+    ret, fit_lane_img = obj.fit_lane(warp_img)
+
+    if m.using_min_M:
+        m_unwarp, *_ = pipline(img, m.M)
+        ret, _ = m.fit_lane(m_unwarp)
+        if v.window_size > 0:
+            v.window_size -= 1
+        elif v.window_size < 0:
+            v.window_size = 5
+        if m.fit_well > 3:
+            m.using_min_M = False
+
+    offset, left_bestx, right_bestx, left_curverad, right_curverad = obj.get_lane_prop()
+
+    parameters['left_curverad'] = left_curverad if left_curverad is not None else 0
+    parameters['right_curverad'] = right_curverad if right_curverad is not None else 0
+
+    scale = 0.3
+    resize_shape = (int(img.shape[1] * scale), int(img.shape[0] * scale))
+    project = obj.project_back(undist_img)
+    unwarp_project = unwarp(project, obj.M, parameters['mtx'], parameters['dist'])
+    show_text(project, parameters)
+    output_project = resize_image(project, (640, 360), '')
+
+    resize_origin_img = resize_image(img, resize_shape, '1. Original')
+    resize_project_img = resize_image(project, resize_shape, '11. Projection')
+    resize_color_img = resize_image(wy_img, resize_shape, '4. Yellow & White 1st Filter')
+    resize_combined_img = resize_image(combined, resize_shape, '8. Combination')
+    resize_combine_warped_img = resize_image(warp_img, resize_shape, '9. Combined Warp')
+    resize_enhance_img = resize_image(undist_img_enhance, resize_shape, '3. Enhanced')
+    resize_project_warped = resize_image(unwarp_project, resize_shape, '12. Project Warped')
+    resize_undisort_img = resize_image(undist_img, resize_shape, '2. Undisort')
+    resize_fit_lane_img = resize_image(fit_lane_img, resize_shape, '10. Lane Fit')
+    resize_edge_img = resize_image(edge, resize_shape, '7. Sobel Filter On Enhanced')
+    resize_rgb_img = resize_image(rgb_img, resize_shape, '5. RGB Filter On Y&W')
+    resize_hls_img = resize_image(hls_img, resize_shape, '6. HLS Filter On Y&W')
+
+
+    final_img = np.vstack((np.hstack((resize_origin_img, resize_rgb_img, resize_combine_warped_img)), \
+                           np.hstack((resize_undisort_img, resize_hls_img, resize_fit_lane_img)), \
+                           np.hstack((resize_enhance_img, resize_edge_img, resize_project_img)), \
+                           np.hstack((resize_color_img, resize_combined_img, resize_project_warped))))
+
+
+    return final_img, output_project
+
+
 
 
 def find_lane_cnn(warped):

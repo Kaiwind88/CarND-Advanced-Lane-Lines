@@ -61,7 +61,6 @@ class Line():
         self.last_fit = None
         self.fit_cnt = 10
 
-
     def is_detected(self):
         return self.detected
 
@@ -171,36 +170,21 @@ class Line():
             curve = abs(np.mean(self.curvature_deque, dtype=np.float32))
             factor = 1.0
             fit_thresh = np.array(fit_thresh)
-            if curve < 50:
-                factor = 5
-            elif curve < 100:
-                factor = 4
-            elif curve < 150:
-                factor = 3
-            elif curve < 200:
-                factor = 2
-            elif curve < 400:
-                factor = 2.5
-            elif curve < 500:
-                factor = 2.4
-            elif curve < 600:
-                factor = 2.3
-            elif curve < 700:
-                factor = 2.2
-            elif curve < 800:
-                factor = 2.0
-            elif curve < 1000:
-                factor = 1.5
-            elif curve < 2000:
-                factor = 1.3
-            elif curve < 3000:
-                factor = 1.2
-            elif curve < 5000:
-                factor = 1.1
-            elif curve < 10000:
-                factor = 1.0
-            else:
-                factor = 0.9
+            if curve < 50: factor = 5
+            elif curve < 100: factor = 4
+            elif curve < 150: factor = 3
+            elif curve < 200: factor = 2
+            elif curve < 400: factor = 2.5
+            elif curve < 500: factor = 2.4
+            elif curve < 600: factor = 2.3
+            elif curve < 700: factor = 2.2
+            elif curve < 800: factor = 2.0
+            elif curve < 1000: factor = 1.5
+            elif curve < 2000: factor = 1.3
+            elif curve < 3000: factor = 1.2
+            elif curve < 5000: factor = 1.1
+            elif curve < 10000: factor = 1.0
+            else: factor = 0.9
             fit_thresh = fit_thresh * factor * self.th_scale
             print("Fit_Thresh: ", fit_thresh, curve, factor)
         except:
@@ -266,7 +250,7 @@ class Line():
         self.curvature_deque.clear()
 
     def re_detected(self):
-        if self.unvalid_cnt > self.queue_len:
+        if self.unvalid_cnt > self.queue_len//3:
             self.unvalid_cnt = 0
             self.fit_cnt = 0
             print(self.name, self.re_detected.__name__)

@@ -502,9 +502,9 @@ def pipline(img, M, parameters=parameters):
     dsobel = dir_thresh(soble_input, sobel_kernel=ksize, thresh=thresh)\
         if sw else zero_img
 
-    combined = np.zeros_like(ysobel)
-    combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1)))] = 1
-    edge = unwarp(combined, M, mtx, dist)
+    edge = np.zeros_like(ysobel)
+    edge[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1)))] = 1
+    # edge = unwarp(edge, M, mtx, dist)
 
     if not parameters['use_color']:
         color_img = zero_img
@@ -517,11 +517,11 @@ def pipline(img, M, parameters=parameters):
     unwarp_img = unwarp(combined, M, mtx, dist)
 
     scale = 0.4
-    resize_shape = (int(img.shape[1]*scale), int(img.shape[0]*scale))
-    cv2.imshow("a", resize_image(rgb_img, resize_shape, 'rgb_img'))
-    cv2.imshow('b', resize_image(hls_img, resize_shape, 'hls_img'))
+    # resize_shape = (int(img.shape[1]*scale), int(img.shape[0]*scale))
+    # cv2.imshow("a", resize_image(rgb_img, resize_shape, 'rgb_img'))
+    # cv2.imshow('b', resize_image(hls_img, resize_shape, 'hls_img'))
 
-    return unwarp_img, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance
+    return unwarp_img, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance, rgb_img, hls_img
 
 # def enum(*sequential):
 #     enums = dict(zip(sequential, range(len(sequential))))
@@ -660,10 +660,10 @@ def key_handler(delay, parameters):
 
 def show_text(img, parameters):
     lines = []
-    undisort_switch = 'ON' if parameters['u'] else 'OFF'
-    unwarp_switch = 'ON' if parameters['w'] else 'OFF'
-    text = "undisort:{} unwarp:{}".format(undisort_switch, unwarp_switch)
-    lines.append(text)
+    # undisort_switch = 'ON' if parameters['u'] else 'OFF'
+    # unwarp_switch = 'ON' if parameters['w'] else 'OFF'
+    # text = "Undisort:{} unwarp:{}".format(undisort_switch, unwarp_switch)
+    # lines.append(text)
     ch = parameters_range['hlschannel'].index(parameters['h'])
     text = "HLS channel:{} min:{} max:{}".format(parameters['h'], \
             parameters['hlsthresh'][ch][0], parameters['hlsthresh'][ch][1])
@@ -671,6 +671,8 @@ def show_text(img, parameters):
     ch = parameters_range['rgbchannel'].index(parameters['c'])
     text = "RGB channel:{} min:{} max:{}".format(parameters['c'], \
             parameters['rgbthresh'][ch][0], parameters['rgbthresh'][ch][1])
+    lines.append(text)
+    text = "Color Filter:{}".format('ON' if parameters['use_color'] else 'OFF')
     lines.append(text)
     for prefix in ['x', 'y', 'm', 'd']:
         thresh_name = prefix+'thresh'
@@ -681,19 +683,19 @@ def show_text(img, parameters):
     lines.append(text)
     text = 'Right Curvature:{:>.2f}m'.format(parameters['right_curverad'])
     lines.append(text)
-    text = "Brightness:{:>.2f}".format(parameters['brightness'])
+    text = "S Channel ROI Brightness:{:>.2f}".format(parameters['brightness'])
     lines.append(text)
-    text = "Breakpoint:{}".format(parameters['b'])
+    text = "Breakpoints:{}".format('ON' if parameters['b'] else 'OFF')
     lines.append(text)
 
     for i, line in enumerate(lines):
-        x = 1
+        x = 10
         y = 30 + 40*i
         cv2.putText(img, text=line, org=(x, y), fontFace=cv2.FONT_HERSHEY_PLAIN, \
                 fontScale=2, color=(255, 255, 0), thickness=2, lineType=cv2.LINE_AA)
 
 def show_line(img, line):
-    x = 1
+    x = 10
     y = 670
     cv2.putText(img, text=line, org=(x, y), fontFace=cv2.FONT_HERSHEY_PLAIN, \
                 fontScale=3, color=(0, 255, 255), thickness=3, lineType=cv2.LINE_AA)

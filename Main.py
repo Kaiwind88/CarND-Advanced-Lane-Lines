@@ -49,15 +49,27 @@ parameters['p'] = True
 f1 = 'project_video.mp4'
 f2 = 'challenge_video.mp4'
 f3 = 'harder_challenge_video.mp4'
-input_file = f3
+input_file = f1
 if input_file == f3:
     parameters['M'] = M_mid
     parameters['MInv'] = MInv_mid
+    parameters['use_color'] = False
+    parameters['x'] = True
+    parameters['y'] = True
+    parameters['m'] = False
+    parameters['d'] = False
 else:
     parameters['M'] = M_max
     parameters['MInv'] = MInv_max
+    parameters['use_color'] = True
+    parameters['x'] = False
+    parameters['y'] = False
+    parameters['m'] = False
+    parameters['d'] = False
 
 lane = Lane(parameters)
+lane_verify = Lane(parameters)
+
 w_name = input_file
 cv2.namedWindow(w_name, cv2.WINDOW_AUTOSIZE)
 cap = cv2.VideoCapture(input_file)
@@ -66,6 +78,10 @@ def progress_bar_cb(x):
     cap.set(cv2.CAP_PROP_POS_FRAMES, x)
 cv2.createTrackbar('Frame',w_name,0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),progress_bar_cb)
 
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+prefix = input_file.split('.')[0]
+out_debug = cv2.VideoWriter(prefix+'_debug.avi',fourcc, 20.0, (1152, 864))
+out_project = cv2.VideoWriter(prefix+'_project.avi',fourcc, 20.0, (640, 360))
 delay = 1
 while(cap.isOpened()):
     if key_handler(delay, parameters):
@@ -85,8 +101,12 @@ while(cap.isOpened()):
             continue
     print("--------current frame:", frame_idx)
 
-    final_img = lane.lane_detection(frame)
+    # final_img = lane.lane_detection(frame)
+    final_img, project = find_lane(frame, lane, lane_verify)
+    print(final_img.shape)
     cv2.imshow(w_name, final_img)
+    out_debug.write(final_img)
+    out_project.write(project)
 
 cap.release()
 cv2.destroyAllWindows()
