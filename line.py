@@ -13,11 +13,9 @@ class PID():
     def set_target(self, target):
         self.target = target
 
-
-
 # Define a class to receive the characteristics of each line detection
 class Line():
-    queue_len = 10
+    queue_len = 6
     def __init__(self, name):
         # was the line detected in the last iteration?
         self.detected = False
@@ -149,7 +147,10 @@ class Line():
     def cal_line_base_pos(self):
         try:
             xm_per_pix = 3.7 / 700
-            self.line_base_pos = (self.bestx - 640)  * xm_per_pix
+            y = 720
+            fit = self.best_fit
+            x_pos = fit[0] * y ** 2 + fit[1] * y + fit[2]
+            self.line_base_pos = (x_pos - 630)  * xm_per_pix
             return self.line_base_pos
         except TypeError:
             return None
@@ -196,24 +197,16 @@ class Line():
             return True
 
         thresh_logic = abs(fit_diff[0]) > fit_thresh[0] or abs(fit_diff[1]) > fit_thresh[1] or abs(fit_diff[2]) > fit_thresh[2]
-        # diffs_logic = (abs(fit_diff[0] - self.last_diffs[0]) > 0.0005 or \
-        #               abs(fit_diff[1] - self.last_diffs[1]) > 0.25) or \
-        #               abs(fit_diff[2] - self.last_diffs[2]) > 2 * abs(self.last_diffs[2])
-
         diffs_logic = (abs(fit_diff[0] - self.last_diffs[0]) > self.th_scale * max((min((abs(fit_diff[0]), abs(self.last_diffs[0]))), 0.00015)) or \
                       abs(fit_diff[1] - self.last_diffs[1]) > self.th_scale * max((min((abs(fit_diff[1]), abs(self.last_diffs[1]))), 0.15)) ) or \
                      abs(fit_diff[2] - self.last_diffs[2]) > self.th_scale * max((min((abs(fit_diff[2]), abs(self.last_diffs[2]))), 100))
 
-
-        abs_logic = abs(self.last_diffs[0]) < abs(fit_diff[0]) and \
-                    abs(self.last_diffs[1]) < abs(fit_diff[1]) and \
-                    abs(self.last_diffs[2]) < abs(fit_diff[2])
-
-        print(self.name, thresh_logic, diffs_logic, abs_logic)
+        print(self.name, thresh_logic, diffs_logic)
         print(self.name, "last:{:>10.5f} {:>10.5f} {:>10.5f}:".format(self.last_diffs[0], self.last_diffs[1], self.last_diffs[2]))
         print(self.name, "diff:{:>10.5f} {:>10.5f} {:>10.5f}:".format(fit_diff[0], fit_diff[1], fit_diff[2]))
         gap = abs(fit_diff - self.last_diffs)
         print(self.name, "gap:{:>10.5f} {:>10.5f} {:>10.5f}:".format(gap[0], gap[1], gap[2]))
+
         if thresh_logic or diffs_logic:
             self.unvalid_cnt += 1
             print(self.name, 'Abandon', "diff:{:>10.5f} {:>10.5f} {:>10.5f} {:>10.5f}:".\
@@ -221,8 +214,6 @@ class Line():
             self.detected = False
             breakpoint(True)
             self.th_pid.target += 2
-            # self.last_fit = self.current_fit * 0.8 + self.best_fit * 0.2
-            # self.current_fit = self.last_fit
             if self.fit_cnt > 0:
                 self.fit_cnt -= 1
             return False
@@ -240,7 +231,6 @@ class Line():
         self.fit_deque.clear()
         self.recent_xfitted.clear()
         self.recent_yfitted.clear()
-        # self.last_fit = None
         self.curvature_deque.clear()
 
     def re_detected(self):

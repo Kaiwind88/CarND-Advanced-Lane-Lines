@@ -7,7 +7,6 @@ import pickle
 import os.path
 import glob
 
-
 # key definition
 # w->unwrap
 # s->undistort
@@ -22,8 +21,8 @@ parameters = {
     'hlsthresh': [[0, 40], [145, 255], [80, 255], [0, 255]],
     'rgbthresh': [[200, 255], [200, 255], [200, 255], [0, 255]],
     'graythresh': [0, 255],
-    'xthresh': [20, 100],
-    'ythresh': [20, 100],
+    'xthresh': [26, 100],
+    'ythresh': [26, 100],
     'mthresh': [30, 100],
     'dthresh': [0.7, 1.2],
     'xksize': 3,
@@ -58,7 +57,8 @@ parameters = {
     'brightness': 0,
     'use_color': False,
     'color_sw': True,
-    'margin': 40
+    'margin': 40,
+    'offset': 0
 }
 
 
@@ -396,6 +396,8 @@ def gaussian_blur(img, kernel_size):
 from collections import deque
 bright_deque = deque(maxlen=5)
 def adjust_parameter(parameters=parameters):
+    if parameters['p']:
+        return
     brightness = np.mean(bright_deque)
     if brightness >= 20 and brightness <= 50:
         ch = 2 #hls -> s
@@ -427,11 +429,6 @@ def otsu(img):
     return th
 
 def enhance_img(img):
-    # median = cv2.medianBlur(img, 5)
-    # k1 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    # dilate = cv2.morphologyEx(median, cv2.MORPH_CLOSE, k1, 3)
-    # return dilate
-
     dst = cv2.GaussianBlur(img, (0,0), 3)
     out = cv2.addWeighted(img, 1.5, dst, -0.5, 0)
     return out
@@ -446,58 +443,62 @@ def pipline(img, M, parameters=parameters):
     mtx = parameters['mtx']
     dist = parameters['dist']
     undist_img = cal_undistort(img, mtx, dist) if sw else img
+
+    # Step 2: Enhence Image
     undist_img_enhance = enhance_img(np.copy(undist_img))
+
+    # Step 3: Get the brightness
     parameters['brightness'] = test_brightness(undist_img_enhance)
     bright_deque.append(parameters['brightness'])
+    # parameters['brightness'] = np.mean(bright_deque)
     adjust_parameter()
-    # Step 2: transform
-    mtx = parameters['mtx']
-    dist = parameters['dist']
-    # unwarp_img = unwarp(undist_img, M, mtx, dist)
 
+    # Step 4: First filter yellow and white color
     input = undist_img_enhance
     wy_img = filter_yellow_white_color(input)
     gray = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY)
 
-    # Step 3: Color Thresh
+    # Step 5: Yellow 2nd filter based on first filter
     channel = parameters['h']
     hls_img = color_select(wy_img, channel=channel)
 
+    # Step 6: White 2nd filter based on first filter
     channel = parameters['c']
     rgb_img = color_select(wy_img, channel=channel)
 
+    # Step 7: Combined Color
     color = np.zeros_like(rgb_img)
     color[(rgb_img == 1) | (hls_img == 1)] = 1
-    # color = cv2.medianBlur(color, 5)
     color = cv2.dilate(color, kernel, iterations=1)
 
     zero_img = np.zeros_like(gray)
-    # Step 2: xsobel
+
+    # Step 7: xsobel
     thresh = parameters['xthresh']
     ksize = parameters['xksize']
     sw = parameters['x']
     soble_input = gray#color_select(undist_img_enhance, channel='S')
     soble_input = gaussian_blur(soble_input, 15)
-    xsobel = abs_sobel_thresh(soble_input, orient='x', sobel_kernel=3, thresh=thresh)\
+    xsobel = abs_sobel_thresh(soble_input, orient='x', sobel_kernel=ksize, thresh=thresh)\
         if sw else zero_img
     # xsobel = cv2.dilate(xsobel, kernel, iterations = 1)
 
-    # Step 3: ysobel
+    # Step 8: ysobel
     thresh = parameters['ythresh']
     ksize = parameters['yksize']
     sw = parameters['y']
-    ysobel = abs_sobel_thresh(soble_input, orient='y', sobel_kernel=3, thresh=thresh)\
+    ysobel = abs_sobel_thresh(soble_input, orient='y', sobel_kernel=ksize, thresh=thresh)\
         if sw else zero_img
     # ysobel = cv2.dilate(ysobel, kernel, iterations = 1)
 
-    # Step 4: msobel
+    # Step 9: msobel
     thresh = parameters['mthresh']
     ksize = parameters['mksize']
     sw = parameters['m']
     msobel = mag_thresh(soble_input, sobel_kernel=ksize, mag_thresh=thresh)\
         if sw else zero_img
 
-    # Step 5: dsobel
+    # Step 10: dsobel
     thresh = parameters['dthresh']
     ksize = parameters['dksize']
     sw = parameters['d']
@@ -512,16 +513,15 @@ def pipline(img, M, parameters=parameters):
         color_img = zero_img
     else:
         color_img = color
+
+    # Step 11: Combined All
     combined = np.zeros_like(ysobel)
     combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1))) | (color_img == 1)] = 1
-    # kernel = np.ones((3,3),np.uint8)
     # combined = cv2.dilate(combined, kernel, iterations=1)
-    unwarp_img = unwarp(combined, M, mtx, dist)
 
-    scale = 0.4
-    # resize_shape = (int(img.shape[1]*scale), int(img.shape[0]*scale))
-    # cv2.imshow("a", resize_image(rgb_img, resize_shape, 'rgb_img'))
-    # cv2.imshow('b', resize_image(hls_img, resize_shape, 'hls_img'))
+    mtx = parameters['mtx']
+    dist = parameters['dist']
+    unwarp_img = unwarp(combined, M, mtx, dist)
 
     return unwarp_img, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance, rgb_img, hls_img
 
@@ -685,6 +685,8 @@ def show_text(img, parameters):
     lines.append(text)
     text = 'Right Curvature:{:>.2f}m'.format(parameters['right_curverad'])
     lines.append(text)
+    text = 'Offset:{} | {:>.2f}cm'.format('Left' if parameters['offset'] < 0 else 'Right', abs(parameters['offset']*100))
+    lines.append(text)
     text = "S Channel ROI Brightness:{:>.2f}".format(parameters['brightness'])
     lines.append(text)
     text = "Breakpoints:{}".format('ON' if parameters['b'] else 'OFF')
@@ -694,7 +696,7 @@ def show_text(img, parameters):
         x = 10
         y = 30 + 40*i
         cv2.putText(img, text=line, org=(x, y), fontFace=cv2.FONT_HERSHEY_PLAIN, \
-                fontScale=2, color=(255, 255, 0), thickness=2, lineType=cv2.LINE_AA)
+                fontScale=2, color=(200, 200, 00), thickness=2, lineType=cv2.LINE_AA)
 
 def show_line(img, line):
     x = 10

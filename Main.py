@@ -13,8 +13,8 @@ M_min = parameters['M_min']
 MInv_min = parameters['MInv_min']
 M = M_max
 MInv = MInv_max
-parameters['p'] = True
-
+parameters['p'] = False
+parameters['b'] = False
 
 f1 = 'project_video.mp4'
 f2 = 'challenge_video.mp4'
@@ -31,7 +31,7 @@ if input_file == f3:
     parameters['y'] = True
     parameters['m'] = False
     parameters['d'] = False
-    parameters['margin'] = 55
+    parameters['margin'] = 65
 else:
     parameters['M'] = M_max
     parameters['MInv'] = MInv_max
@@ -66,7 +66,7 @@ while(cap.isOpened()):
     else:
         delay = 1
 
-    if parameters['p']:
+    if not parameters['p']:
         ret, frame = cap.read()
         frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
         cv2.setTrackbarPos('Frame',w_name, frame_idx)
