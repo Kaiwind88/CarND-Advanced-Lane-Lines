@@ -22,7 +22,7 @@ f3 = 'harder_challenge_video.mp4'
 
 # Change Input File Here
 
-input_file = f3
+input_file = f1
 if input_file == f3:
     parameters['M'] = M_mid
     parameters['MInv'] = MInv_mid
@@ -56,7 +56,7 @@ cv2.createTrackbar('Frame',w_name,0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),prog
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
 prefix = input_file.split('.')[0]
 out_debug = cv2.VideoWriter(prefix+'_debug.avi',fourcc, 20.0, (1152, 864))
-out_project = cv2.VideoWriter(prefix+'_project.avi',fourcc, 20.0, (640, 360))
+out_project = cv2.VideoWriter(prefix+'_project.avi',fourcc, 20.0, (1280, 720))
 delay = 1
 while(cap.isOpened()):
     if key_handler(delay, parameters):

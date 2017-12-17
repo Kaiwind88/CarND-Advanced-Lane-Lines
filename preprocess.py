@@ -660,7 +660,7 @@ def show_text(img, parameters):
         x = 10
         y = 30 + 40*i
         cv2.putText(img, text=line, org=(x, y), fontFace=cv2.FONT_HERSHEY_PLAIN, \
-                fontScale=2, color=(200, 200, 00), thickness=2, lineType=cv2.LINE_AA)
+                fontScale=2, color=(255, 255, 00), thickness=2, lineType=cv2.LINE_AA)
 
 def show_line(img, line):
     x = 10
