@@ -42,7 +42,9 @@ I then used the output `objpoints` and `imgpoints` to compute the camera calibra
 <img src="writeup_res/calibration.png" width="100%" alt="calibration" >
 
 **File**: preprocess.py
+
 **Input**: Chessboard Images captured by Camera in this project, number of inside corners in x, y
+
 **Output**:  camera matrix, distortion coefﬁcients
 
 ```python
@@ -110,7 +112,9 @@ I use different pipelines between hard video and the other two. These are their 
 I use the OpenCV GUI, read a frame from video file one by one
 
 **File**: Main.py
+
 **Input**: Project videos
+
 **Output**: frame
 
 ```python
@@ -130,7 +134,9 @@ There are two kinds of [distortion](https://classroom.udacity.com/nanodegrees/nd
 Therefore, we need to correct these distortion first.
 
 **File**: preprocess.py
+
 **Input**: frame
+
 **Output**: undist_img
 
 ```python
@@ -143,7 +149,9 @@ def cal_undistort(img, mtx, dist):
 This step is mainly for challenge video, that images are very blurry, no much discrimination. So I find a sharp algorithm [here](https://stackoverflow.com/questions/4993082/how-to-sharpen-an-image-in-opencv).
 
 **File**: preprocess.py
+
 **Input**: undist_img
+
 **Output**: undist_img_enhance
 
 ```python
@@ -160,8 +168,11 @@ def enhance_img(img):
 I used two layers of color filters. This is the first layer, it filters a small part of yellow and white color in HLS space  
 
 **File**: preprocess.py
+
 **Input**: undist_img_enhance
+
 **Output**: wy_img
+
 ```
 def filter_yellow_white_color(img):
     img_cov = cv2.cvtColor(img, cv2.COLOR_BGR2HLS_FULL)
@@ -217,7 +228,9 @@ White is easy.
 
 
 **File**: preprocess.py
+
 **Input**: wy_img
+
 **Output**: (rgb_img, hls_img)->color_img
 
 Flow: test_brightness -> adjust_parameter -> color_select -> combined color
@@ -311,7 +324,9 @@ I use first color filter output and convert to grayscale, then use GaussianBlur,
 <img src="writeup_res/sobel.png" width="80%" alt="sobel" >
 
 **File**: preprocess.py
+
 **Input**: wy_img->gray image
+
 **Output**: xsobel, ysobel
 
 ```python
@@ -341,7 +356,9 @@ def abs_sobel_thresh(img, orient='x', sobel_kernel=3,  thresh=(0, 255)):
 In this project, I didn't use msobel and dsobel. The output is controlled by parameters. color_img feed to project and challenge. xsobel, ysobel and optional color_img feed to harder challenge. You can see output in section 5-6 and 7 separately.
 
 **File**: preprocess.py
+
 **Input**: xsobel, ysobel, msobel, dsobel, color_img
+
 **Output**: combined image
 
 ```python
@@ -360,7 +377,9 @@ In this project, I didn't use msobel and dsobel. The output is controlled by par
 Warp perspective transform to a bird view is for easy histogram operations.
 
 **File**: preprocess.py
+
 **Input**: combined image
+
 **Output**: combine_warped image
 
 ```python
@@ -380,7 +399,9 @@ def warp_perspective(img, M, mtx, dist):
 This is the core of the project. This is a rough flow chart, ignoring a lot of detail.
 
 **File**: lane.py 
+
 **Input**: combine_warped image
+
 **Output**: fit_lane_img
 
 <img src="writeup_res/fit_flow.png" width="100%" alt="fit_flow" > 
@@ -551,16 +572,21 @@ After getting the abandon outcome. The system decides which fit will be used.
 ### 3.11. Project Back
 
 **File**: lane.py
+
 **Input**: undist_img and fit_lane_img polynomial curve
+
 **Output**: project image
 
 In the project output, I list most of parameters.
+
 <img src="writeup_res/project.png" width="80%" alt="project" > 
 
 ### 3.12. Warp Projected
 
 **File**: lane.py
+
 **Input**: project image
+
 **Output**: warp_project image
 
 I also list the warp projected image for debugging.
@@ -635,6 +661,7 @@ parameters_range = {
 To facilitate the adjustment of parameters, I define a lot of shortcuts, the following table is their description.
 
 **File**: preprocess.py
+
 **Function**: key_handler
 
 | key  | parameters key | transition      | description                                     | 
@@ -666,8 +693,9 @@ I combined all three debug and project videos together.
 
 All [Debug Videos](https://youtu.be/dtjdQLUjK1M)
 All [Project Videos](https://youtu.be/MHfkb9zAEaI)
+
 ---
 
-## Discussion
+## 7. Discussion
 
 The image output of the first two projects is relatively stable, and the lane is straight, so I chose the color to do the lane finding. Then, I spent most of time on the third project, and I think the main reason that the output seems to work most of the time is because I chose a small matrix, with adaptive threshold tuning. But there are still many problems that have not been solved, especially in particularly bright areas and sharp turns. I've tried many methods, including creating fake lanes, but when they are generated is not particularly well-defined. In addition, I think I should add more cybernetic techniques, such as PID, but I still lack of knowledge of these contents.
