@@ -23,15 +23,15 @@ My project includes the following files:
 
 | Files         		                          |     Description	           						      |
 |:-----------------------------------------------:|:-----------------------------------------------------:|
-|Main.py 				                          |Entry, Configure Video, Read and write frame, GUI      |
+|Main.py 				                          |entry, configure video, read and write frame, GUI      |
 |lane.py 				                          |lane finding, pipeline, and draw 		              |
 |line.py 				                          |lane lines fit, valid and store		                  |
 |preprocess.py			                          |thresholding, preprocessing, parameters, keyhandler	  |
 |README.md 		                                  |summarizing the results								  |
 |carnd-p4-env.yml 		                          |conda environment 									  |
-|video_output           	                      |All project and debug video output                     |
+|video_output           	                      |all project and debug video output                     |
 |writeup_res                                      |writeup resource                                       |
-|data.pickle                                      |Store parameters, include calibration and thresholding and so on|
+|data.pickle                                      |store parameters, include calibration and thresholding and so on|
 
 ## 2. Camera Calibration
 
@@ -92,7 +92,7 @@ I notice that the harder challenge video has many sharp curve, it's unsuitable u
 
 <img src="writeup_res/warp.png" width="60%" alt="warp" >
 
-## 3. Pipeline
+## 4. Pipeline
 
 The figure shows the approximate data flow of the system, the sequence number indicates the order of processing.
 
@@ -107,7 +107,7 @@ I use different pipelines between hard video and the other two. These are their 
 |M & MInv               |Max                                |Middle for most part, Min for very sharp section|
 |Window Width (margin)  |40                                 |65                                       |
 
-### 3.1. Get Original Image
+### 4.1. Get Original Image
 
 I use the OpenCV GUI, read a frame from video file one by one
 
@@ -123,7 +123,7 @@ cap = cv2.VideoCapture(input_file)
 ret, frame = cap.read()
 ```
 
-### 3.2. Undistort Image
+### 4.2. Undistort Image
 
 These distortions are caused by curved lenses, light rays often bend at the edges of these lenses. 
 There are two kinds of [distortion](https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/40ec78ee-fb7c-4b53-94a8-028c5c60b858/concepts/a9f8aeb5-d619-4a58-aa90-6b1bb81cd675):
@@ -144,7 +144,7 @@ def cal_undistort(img, mtx, dist):
     return cv2.undistort(img, mtx, dist, None, mtx)
 ```
 
-### 3.3. Enhance Image
+### 4.3. Enhance Image
 
 This step is mainly for challenge video, that images are very blurry, no much discrimination. So I find a sharp algorithm [here](https://stackoverflow.com/questions/4993082/how-to-sharpen-an-image-in-opencv).
 
@@ -163,7 +163,7 @@ def enhance_img(img):
 
 <img src="writeup_res/enhanced.png" width="100%" alt="enhanced" >
 
-### 3.4. The Frist Yellow and White Color Filter
+### 4.4. The Frist Yellow and White Color Filter
 
 I used two layers of color filters. This is the first layer, it filters a small part of yellow and white color in HLS space  
 
@@ -198,7 +198,7 @@ def filter_yellow_white_color(img):
 
 <img src="writeup_res/filter_wy.png" width="100%" alt="filter_wy" >
 
-### 3.5-6. The Second Color Filter Base On The First
+### 4.5-6. The Second Color Filter Base On The First
 
 The second color filter layer is a little trick, I did a lot of trials to find some relationship between brightness and color thresholding. Finally, I get a simple correspondence. I understand this hasn't wide range of applicability, but it works well in this project.
 
@@ -316,7 +316,7 @@ def color_select(img, channel='R', parameters=parameters):
 
 <img src="writeup_res/combined_color.png" width="80%" alt="combined_color" >
 
-### 3.7. Sobel Filter
+### 4.7. Sobel Filter
 
 I only use x and y sobel filter on harder one. Taking the gradient in the x direction emphasizes edges closer to vertical. Alternatively, taking the gradient in the y direction emphasizes edges closer to horizontal.
 I use first color filter output and convert to grayscale, then use GaussianBlur, feed to the Sobel filter at last. 
@@ -351,9 +351,9 @@ def abs_sobel_thresh(img, orient='x', sobel_kernel=3,  thresh=(0, 255)):
     return binary_output
 ```
 
-### 3.8. Combination
+### 4.8. Combination
 
-In this project, I didn't use msobel and dsobel. The output is controlled by parameters. color_img feed to project and challenge. xsobel, ysobel and optional color_img feed to harder challenge. You can see output in section 5-6 and 7 separately.
+In this project, I didn't use msobel and dsobel. The output is controlled by parameters. color_img feed to project and challenge. xsobel, ysobel and optional color_img feed to harder challenge. You can see output in section 4.5-6 and 4.7 separately.
 
 **File**: preprocess.py
 
@@ -372,7 +372,7 @@ In this project, I didn't use msobel and dsobel. The output is controlled by par
 ```
 
 
-### 3.9. Warp Combination Image
+### 4.9. Warp Combination Image
 
 Warp perspective transform to a bird view is for easy histogram operations.
 
@@ -393,9 +393,9 @@ def warp_perspective(img, M, mtx, dist):
 <img src="writeup_res/combine_warp.png" width="80%" alt="combine_warp" > 
 
 
-### 3.10. Lane Lines Finding
+### 4.10. Lane Lines Finding
 
-#### 3.10.1. Software Architecture
+#### 4.10.1. Software Architecture
 This is the core of the project. This is a rough flow chart, ignoring a lot of detail.
 
 **File**: lane.py 
@@ -406,7 +406,7 @@ This is the core of the project. This is a rough flow chart, ignoring a lot of d
 
 <img src="writeup_res/fit_flow.png" width="100%" alt="fit_flow" > 
 
-#### 3.10.2. Radius of curvature
+#### 4.10.2. Radius of curvature
 
 After verifying the current fit. I use these pixels to calculate curvature and then smoothing them.
 
@@ -432,9 +432,9 @@ After verifying the current fit. I use these pixels to calculate curvature and t
         return self.radius_of_curvature
 ```
 
-#### 3.10.3. Position of the vehicle
+#### 4.10.3. Position of the vehicle
 
-I use best fit to calculate left and right line position, get the bottom x value, minus 640 which is an image center. The output is a positive or negative value. Left line is negative, right line is positive. Add left and right, get the offset. If it's negative, means right, otherwise, left. 
+I use best fit to calculate left and right line position, get the bottom x value, minus 640 which is an image center. The output is a positive or negative value. Left line is negative, right line is positive. Add left and right, get the offset. If it's negative, means right offset, otherwise, left offset. 
 ```python
     def cal_line_base_pos(self):
         try:
@@ -449,7 +449,7 @@ I use best fit to calculate left and right line position, get the bottom x value
 ```
 
 
-#### 3.10.2. Constraints:
+#### 4.10.4. Constraints:
 Most of the constraints here are for the harder challenge.
 
 - Line fit thresh. Both logics are used to constraint dramatic change.
@@ -569,7 +569,7 @@ After getting the abandon outcome. The system decides which fit will be used.
 ```
 
 
-### 3.11. Project Back
+### 4.11. Project Back
 
 **File**: lane.py
 
@@ -581,7 +581,7 @@ In the project output, I list most of parameters.
 
 <img src="writeup_res/project.png" width="80%" alt="project" > 
 
-### 3.12. Warp Projected
+### 4.12. Warp Projected
 
 **File**: lane.py
 
@@ -593,9 +593,9 @@ I also list the warp projected image for debugging.
 <img src="writeup_res/project_warped.png" width="80%" alt="project_warped" > 
 
 
-## 4. Parameters
+## 5. Parameters
 
-I use a parameters dictionary for configuring kinds of parameters and storing. I create a parameters_range to limit the scope of the partial value. When everything is OK, I store them to the "data.pickle" file. Then do not need to re-adjust the parameters each time.
+I use a parameters dictionary for configuring kinds of parameters and storing. I create a parameters_range to limit the scope of the partial value. When everything is OK, I store them to the "data.pickle" file. Then do not need to re-adjust the parameters and calibration camera every time.
 
 **File**: preprocess.py
 
@@ -656,7 +656,7 @@ parameters_range = {
 }
 ```
 
-## 5. Key Handler
+## 6. Key Handler
 
 To facilitate the adjustment of parameters, I define a lot of shortcuts, the following table is their description.
 
@@ -677,7 +677,7 @@ To facilitate the adjustment of parameters, I define a lot of shortcuts, the fol
 | s    | 's'            | None               | Debug Step mode, processing frame one by one |
 | r    | 'r'            | None               | Debug Run mode, cancel step mode, processing frame continuously|
 | C    | 'color_sw'     | None               | Color filter switch                          |
-| S    | None           | None               | Store Parameters                             |
+| S    | None           | None               | Save Parameters                              |
 | 9    | None           | None               | Decrease threshold min value                 |
 | 0    | None           | None               | Increase threshold min value                 |
 | -    | None           | None               | Decrease threshold max value                 |
@@ -687,15 +687,16 @@ To facilitate the adjustment of parameters, I define a lot of shortcuts, the fol
 
 Besides, there is a trackbar for selecting and displaying frame.
 
-## 6. Video Ouput
+## 7. Video Ouput
 
 I combined all three debug and project videos together.
 
-All [Debug Videos](https://youtu.be/dtjdQLUjK1M)
-All [Project Videos](https://youtu.be/MHfkb9zAEaI)
+All [Debug Videos](https://youtu.be/dtjdQLUjK1M).
+
+All [Project Videos](https://youtu.be/MHfkb9zAEaI).
 
 ---
 
-## 7. Discussion
+## 8. Discussion
 
 The image output of the first two projects is relatively stable, and the lane is straight, so I chose the color to do the lane finding. Then, I spent most of time on the third project, and I think the main reason that the output seems to work most of the time is because I chose a small matrix, with adaptive threshold tuning. But there are still many problems that have not been solved, especially in particularly bright areas and sharp turns. I've tried many methods, including creating fake lanes, but when they are generated is not particularly well-defined. In addition, I think I should add more cybernetic techniques, such as PID, but I still lack of knowledge of these contents.
