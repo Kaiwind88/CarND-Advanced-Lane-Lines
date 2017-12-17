@@ -595,7 +595,7 @@ I also list the warp projected image for debugging.
 
 ## 5. Parameters
 
-I use a parameters dictionary for configuring kinds of parameters and storing. I create a parameters_range to limit the scope of the partial value. When everything is OK, I store them to the "data.pickle" file. Then do not need to re-adjust the parameters and calibration camera every time.
+I use a parameters dictionary for configuring kinds of parameters and storing. I create a parameters_range to limit the scope of the partial value. When everything is OK, I store them to the "data.pickle" file. Then do not need to re-adjust the parameters and calibrate camera every time.
 
 **File**: preprocess.py
 
@@ -658,7 +658,7 @@ parameters_range = {
 
 ## 6. Key Handler
 
-To facilitate the adjustment of parameters, I define a lot of shortcuts, the following table is their description.
+To facilitate the adjustment of parameters, I define a lot of hotkeys, the following table is their description.
 
 **File**: preprocess.py
 
