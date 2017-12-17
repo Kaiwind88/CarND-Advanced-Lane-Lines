@@ -1,4 +1,4 @@
-from find_lane import *
+from lane import *
 from preprocess import *
 
 load_data()
@@ -77,8 +77,8 @@ while(cap.isOpened()):
 
     print("--------current frame:", frame_idx)
 
-    final_img, project = find_lane(frame, lane, lane_verify)
-    print(final_img.shape)
+    final_img, project = pipeline(frame, lane, lane_verify)
+    # print(final_img.shape)
     cv2.imshow(w_name, final_img)
     out_debug.write(final_img)
     out_project.write(project)

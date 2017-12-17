@@ -8,7 +8,7 @@ import os.path
 import glob
 
 # key definition
-# w->unwrap
+# w->unwarp
 # s->undistort
 # c->color
 # x->xsobel
@@ -242,7 +242,7 @@ def get_perspective_transform(img, nx, ny, mtx, dist, src = None, dst = None):
         M = cv2.getPerspectiveTransform(src, dst)
     return M
 
-def unwarp(img, M, mtx, dist):
+def warp_perspective(img, M, mtx, dist):
     undist = cal_undistort(img, mtx, dist)
     img_size = (int(img.shape[1]), int(img.shape[0]))
     warped = cv2.warpPerspective(undist, M, img_size)
@@ -255,12 +255,12 @@ def show_images(orig, dest, orig_txt='Original Image', dest_txt = 'Destination I
         ax1.imshow(cv2.cvtColor(orig, cv2.COLOR_BGR2RGB))
     else:
         ax1.imshow(orig, cmap='gray')
-    ax1.set_title(orig_txt, fontsize=40)
+    ax1.set_title(orig_txt, fontsize=20)
     if dest.ndim == 3 and dest.shape[2] == 3:
         ax2.imshow(cv2.cvtColor(dest, cv2.COLOR_BGR2RGB))
     else:
         ax2.imshow(dest, cmap='gray')
-    ax2.set_title(dest_txt, fontsize=40)
+    ax2.set_title(dest_txt, fontsize=20)
     plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
     plt.show()
 
@@ -322,41 +322,6 @@ def dir_thresh(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     binary_output[(absgraddir >= thresh[0]) & (absgraddir <= thresh[1])] = 1
 
     # Return the binary image
-    return binary_output
-
-
-def hls_select(img, thresh=(0, 255), channel='S'):
-    # 1) Convert to HLS color space
-    hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
-    if channel == 'S':
-        ch_img = hls[:,:,2]
-    elif channel == 'L':
-        ch_img = hls[:,:,1]
-    elif channel == 'H':
-        ch_img = hls[:,:,0]
-    else:
-        ch_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # 2) Apply a threshold to the S hlschannel
-    binary_output = np.zeros_like(ch_img)
-    binary_output[(ch_img > thresh[0]) & (ch_img <= thresh[1])] = 1
-    # 3) Return a binary image of threshold result
-    return binary_output
-
-
-def rgb_select(img, thresh=(0, 255), channel='R'):
-    # 1) Convert to HLS color space
-    if channel == 'R':
-        ch_img = img[:,:,2]
-    elif channel == 'G':
-        ch_img = img[:,:,1]
-    elif channel == 'B':
-        ch_img = img[:,:,0]
-    else:
-        ch_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # 2) Apply a threshold to the S hlschannel
-    binary_output = np.zeros_like(ch_img)
-    binary_output[(ch_img > thresh[0]) & (ch_img <= thresh[1])] = 1
-    # 3) Return a binary image of threshold result
     return binary_output
 
 def color_select(img, channel='R', parameters=parameters):
@@ -436,7 +401,7 @@ def enhance_img(img):
 def use_color(use):
     parameters['use_color'] = use
 
-def pipline(img, M, parameters=parameters):
+def preprocessing(img, M, parameters=parameters):
     kernel = np.ones((1, 1), np.uint8)
     # Step 1: undistort
     sw = parameters['u']
@@ -456,29 +421,28 @@ def pipline(img, M, parameters=parameters):
     # Step 4: First filter yellow and white color
     input = undist_img_enhance
     wy_img = filter_yellow_white_color(input)
-    gray = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY)
 
-    # Step 5: Yellow 2nd filter based on first filter
-    channel = parameters['h']
-    hls_img = color_select(wy_img, channel=channel)
-
-    # Step 6: White 2nd filter based on first filter
+    # Step 5: White 2nd filter based on first filter
     channel = parameters['c']
     rgb_img = color_select(wy_img, channel=channel)
+
+    # Step 6: Yellow 2nd filter based on first filter
+    channel = parameters['h']
+    hls_img = color_select(wy_img, channel=channel)
 
     # Step 7: Combined Color
     color = np.zeros_like(rgb_img)
     color[(rgb_img == 1) | (hls_img == 1)] = 1
     color = cv2.dilate(color, kernel, iterations=1)
 
+    gray = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY)
     zero_img = np.zeros_like(gray)
-
+    soble_input = gray
+    soble_input = gaussian_blur(soble_input, 15)
     # Step 7: xsobel
     thresh = parameters['xthresh']
     ksize = parameters['xksize']
     sw = parameters['x']
-    soble_input = gray#color_select(undist_img_enhance, channel='S')
-    soble_input = gaussian_blur(soble_input, 15)
     xsobel = abs_sobel_thresh(soble_input, orient='x', sobel_kernel=ksize, thresh=thresh)\
         if sw else zero_img
     # xsobel = cv2.dilate(xsobel, kernel, iterations = 1)
@@ -505,7 +469,7 @@ def pipline(img, M, parameters=parameters):
     dsobel = dir_thresh(soble_input, sobel_kernel=ksize, thresh=thresh)\
         if sw else zero_img
 
-    edge = np.zeros_like(ysobel)
+    edge = np.zeros_like(gray)
     edge[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1)))] = 1
     # edge = unwarp(edge, M, mtx, dist)
 
@@ -515,15 +479,15 @@ def pipline(img, M, parameters=parameters):
         color_img = color
 
     # Step 11: Combined All
-    combined = np.zeros_like(ysobel)
+    combined = np.zeros_like(gray)
     combined[(((xsobel == 1) & (ysobel == 1)) | ((msobel == 1) & (dsobel == 1))) | (color_img == 1)] = 1
     # combined = cv2.dilate(combined, kernel, iterations=1)
 
     mtx = parameters['mtx']
     dist = parameters['dist']
-    unwarp_img = unwarp(combined, M, mtx, dist)
+    combine_warped = warp_perspective(combined, M, mtx, dist)
 
-    return unwarp_img, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance, rgb_img, hls_img
+    return combine_warped, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance, rgb_img, hls_img
 
 # def enum(*sequential):
 #     enums = dict(zip(sequential, range(len(sequential))))
@@ -685,7 +649,7 @@ def show_text(img, parameters):
     lines.append(text)
     text = 'Right Curvature:{:>.2f}m'.format(parameters['right_curverad'])
     lines.append(text)
-    text = 'Offset:{} | {:>.2f}cm'.format('Left' if parameters['offset'] < 0 else 'Right', abs(parameters['offset']*100))
+    text = 'Offset:{} | {:>.2f}cm'.format('Left' if parameters['offset'] > 0 else 'Right', abs(parameters['offset']*100))
     lines.append(text)
     text = "S Channel ROI Brightness:{:>.2f}".format(parameters['brightness'])
     lines.append(text)
@@ -728,15 +692,15 @@ def show_processed_images(image_dict):
     plt.show()
 
 def transform(img, nx, ny, mtx, dist):
-    src = np.float32([[410, 560], [850, 560], [1110, 719.5], [200, 719.5]]) # (lt,rt,rb,lb)
-    dst = np.float32([[320, 0.5], [960, 0.5], [960, 700], [320, 700]])
+    src = np.float32([[410, 560], [850, 560], [1110, 720], [200, 720]]) # (lt,rt,rb,lb)
+    dst = np.float32([[320, 0], [960, 0], [960, 700], [320, 700]])
 
     M_min = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
     MInv_min = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
 
 
-    src = np.float32([[480, 500], [740, 500], [1110, 719.5], [200, 719.5]]) # (lt,rt,rb,lb)
-    dst = np.float32([[320, 0.5], [960, 0.5], [960, 700], [320, 700]])
+    src = np.float32([[480, 500], [740, 500], [1110, 720], [200, 720]]) # (lt,rt,rb,lb)
+    dst = np.float32([[320, 0], [960, 0], [960, 700], [320, 700]])
 
     M_mid = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
     MInv_mid = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
@@ -746,14 +710,15 @@ def transform(img, nx, ny, mtx, dist):
     img_size = (img.shape[1], img.shape[0])
     src = np.float32(
         [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
-         [((img_size[0] / 6) - 10), img_size[1]],
+         [(img_size[0] / 2 + 55), img_size[1] / 2 + 100],
          [(img_size[0] * 5 / 6) + 60, img_size[1]],
-         [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
+         [((img_size[0] / 6) - 10), img_size[1]]])
     dst = np.float32(
         [[(img_size[0] / 4), 0],
-         [(img_size[0] / 4), img_size[1]],
+         [(img_size[0] * 3 / 4), 0],
          [(img_size[0] * 3 / 4), img_size[1]],
-         [(img_size[0] * 3 / 4), 0]])
+         [(img_size[0] / 4), img_size[1]]])
+    print(src, dst)
     M_max = get_perspective_transform(img, nx, ny, mtx, dist, src, dst)
     MInv_max = get_perspective_transform(img, nx, ny, mtx, dist, dst, src)
     return M_max, MInv_max, M_mid, MInv_mid, M_min, MInv_min
@@ -765,9 +730,9 @@ def resize_image(img, shape, title = ''):
         stack = np.dstack((img, img, img))*255
     show_line(stack, title)
     resize_img = cv2.resize(stack, shape, interpolation=cv2.INTER_CUBIC)
-    h = resize_img.shape[0]
-    w = resize_img.shape[1]
-    cv2.rectangle(resize_img, (0, 0), (w, h), (0, 0, 255), 2)
+    h = resize_img.shape[0]-1
+    w = resize_img.shape[1]-1
+    cv2.rectangle(resize_img, (0, 0), (w, h), (0, 0, 255), 1)
     return resize_img
 
 

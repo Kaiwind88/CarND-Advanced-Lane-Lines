@@ -2,7 +2,7 @@ from line import *
 from preprocess import *
 
 
-def find_lane(img, m, v):
+def pipeline(img, m, v):
     if m.redetect_cnt > 3:
         m.redetect_cnt -= 1
         m.redetect = True
@@ -10,7 +10,6 @@ def find_lane(img, m, v):
     if m.redetect and (m.redetect_cnt != -1):
         m.left_line.fit_cnt = 0
         m.right_line.fit_cnt = 0
-        v.window_size = 5
         v.redetect = True
         m.using_min_M = True
         m.fit_well = 0
@@ -22,45 +21,41 @@ def find_lane(img, m, v):
         obj = m
 
     warp_img, undist_img, wy_img, gray, color, combined, edge, undist_img_enhance, rgb_img, hls_img \
-        = pipline(img, obj.M)
+        = preprocessing(img, obj.M)
     ret, fit_lane_img = obj.fit_lane(warp_img)
 
     if m.using_min_M:
-        m_unwarp, *_ = pipline(img, m.M)
-        ret, _ = m.fit_lane(m_unwarp)
-        if v.window_size > 0:
-            v.window_size -= 1
-        elif v.window_size < 0:
-            v.window_size = 5
+        m_warp, *_ = preprocessing(img, m.M)
+        ret, _ = m.fit_lane(m_warp)
         if m.fit_well > 3:
             m.using_min_M = False
 
     scale = 0.3
     resize_shape = (int(img.shape[1] * scale), int(img.shape[0] * scale))
     project = obj.project_back(undist_img)
-    unwarp_project = unwarp(project, obj.M, parameters['mtx'], parameters['dist'])
+    warp_project = warp_perspective(project, obj.M, parameters['mtx'], parameters['dist'])
     show_text(project, parameters)
-    output_project = resize_image(project, (640, 360), '')
-
+    project_img = resize_image(project, (640, 360), '')
+    cv2.imshow('a', warp_project)
     resize_origin_img = resize_image(img, resize_shape, '1. Original')
     resize_project_img = resize_image(project, resize_shape, '11. Projection')
     resize_color_img = resize_image(wy_img, resize_shape, '4. Yellow & White 1st Filter')
     resize_combined_img = resize_image(combined, resize_shape, '8. Combination')
     resize_combine_warped_img = resize_image(warp_img, resize_shape, '9. Combined Warp')
     resize_enhance_img = resize_image(undist_img_enhance, resize_shape, '3. Enhanced')
-    resize_project_warped = resize_image(unwarp_project, resize_shape, '12. Project Warped')
+    resize_project_warped = resize_image(warp_project, resize_shape, '12. Project Warped')
     resize_undisort_img = resize_image(undist_img, resize_shape, '2. Undisort')
     resize_fit_lane_img = resize_image(fit_lane_img, resize_shape, '10. Lane Fit')
     resize_edge_img = resize_image(edge, resize_shape, '7. Sobel Filter On Enhanced')
     resize_rgb_img = resize_image(rgb_img, resize_shape, '5. RGB Filter On Y&W')
     resize_hls_img = resize_image(hls_img, resize_shape, '6. HLS Filter On Y&W')
 
-    final_img = np.vstack((np.hstack((resize_origin_img, resize_rgb_img, resize_combine_warped_img)), \
+    debug_img = np.vstack((np.hstack((resize_origin_img, resize_rgb_img, resize_combine_warped_img)), \
                            np.hstack((resize_undisort_img, resize_hls_img, resize_fit_lane_img)), \
                            np.hstack((resize_enhance_img, resize_edge_img, resize_project_img)), \
                            np.hstack((resize_color_img, resize_combined_img, resize_project_warped))))
 
-    return final_img, output_project
+    return debug_img, project_img
 
 
 class Lane():
@@ -243,9 +238,9 @@ class Lane():
         # Draw the lane onto the warped blank image
         cv2.fillPoly(window_img, np.int_([left_line_pts]), (0, 255, 0))
         cv2.fillPoly(window_img, np.int_([right_line_pts]), (0, 255, 0))
-        result = cv2.addWeighted(out_img, 1, window_img, 0.5, 0)
+        fit_lane_img = cv2.addWeighted(out_img, 1, window_img, 0.5, 0)
 
-        return result
+        return fit_lane_img
 
     def project_back(self, orig):
         if self.MInv is None or self.left_fit is None or self.right_fit is None:
@@ -271,9 +266,9 @@ class Lane():
         cv2.fillPoly(color_warp, np.int_([pts]), (0, 255, 0))
 
         # Warp the blank back to original image space using inverse perspective matrix (Minv)
-        newwarp = cv2.warpPerspective(color_warp, self.MInv, (orig.shape[1], orig.shape[0]))
+        new_unwarp = cv2.warpPerspective(color_warp, self.MInv, (orig.shape[1], orig.shape[0]))
         # Combine the result with the original image
-        result = cv2.addWeighted(orig, 1, newwarp, 0.6, 0)
+        result = cv2.addWeighted(orig, 1, new_unwarp, 0.6, 0)
         return result
 
     def show_zero_img(self, img):
@@ -309,11 +304,8 @@ class Lane():
         try:
             self.offset = self.left_line_base_pos + self.right_line_base_pos
             self.left_fit, self.right_fit = self.fit_smoothing(self.left_line, self.right_line)
-            # print('left best fit: {:>9.4} {:>9.4} {:>9.4}'.format(self.left_fit[0], self.left_fit[1], self.left_fit[2]))
-            # print('right best fit: {:>9.4} {:>9.4} {:>9.4}'.format(self.right_fit[0], self.right_fit[1], self.right_fit[2]))
             print('offset: {:>9.4} {:>9.4} {:>9.4}'.format(self.left_line_base_pos, self.right_line_base_pos,
                                                            self.offset))
-            # print('curvature: {:>9.4} {:>9.4}'.format(self.left_radius_of_curvature, self.right_radius_of_curvature))
         except:
             print('offset', None)
 
@@ -338,7 +330,7 @@ class Lane():
         else:
             return False
 
-    def valid_redetected_current_fit(self, left_line, right_line):
+    def verify_redetected_current_fit(self, left_line, right_line):
         if self.left_confidence and self.right_confidence:
             return 0
         max_y = self.binary_warped.shape[0]
@@ -382,8 +374,8 @@ class Lane():
 
             return 1
 
-    def valid_both_lanes(self, left_line, right_line):
-        ret = self.valid_redetected_current_fit(left_line, right_line)
+    def verify_both_lanes(self, left_line, right_line):
+        ret = self.verify_redetected_current_fit(left_line, right_line)
         if ret > 0:
             breakpoint(ret > 0)
             if ret == 1:
@@ -446,49 +438,51 @@ class Lane():
         print('Best Gap: ', lane_best_distance - lane_space)
         lane_distance = lane_current_distance * 0.8 + lane_best_distance * 0.2
 
-        abandon_best_fit = False
-        abandon_current_fit = False
+        # True: abandon self.left_fit and self.right_fit
+        abandon_last_used_fit = False
+        # True: abandon left_line.current_fit and right_line.current_fit
+        abandon_line_current_fit = False
 
 
         for i, distance in enumerate(lane_current_distance[:-1]):
             # filter current cross line, large spacing and center point offset
             if distance < 0 or abs(distance - avg_current_distance) > 400 or avg_current_distance > 800:
-                abandon_best_fit = True
-                abandon_current_fit = True
+                abandon_last_used_fit = True
+                abandon_line_current_fit = True
                 break
             # filter bad current fit with smaller constrains
             elif abs(distance - avg_best_distance) > 300:
-                abandon_current_fit = True
+                abandon_line_current_fit = True
                 break
             else:
                 continue
 
         # filer small center spacing at bottom
         if current_middle + 100 > right_fitx[0] or current_middle - 100 < left_fitx[0]:
-            abandon_current_fit = True
+            abandon_line_current_fit = True
 
         # filter like hyperbolic curve
         mid = lane_current_distance[1]
         margin = 50
         if (lane_current_distance[0] - mid > margin) and \
                 (lane_current_distance[2] - mid > margin):
-            abandon_current_fit = True
+            abandon_line_current_fit = True
 
         left_curv = min(self.left_line.radius_of_curvature, 1000)
         right_curv = min(self.right_line.radius_of_curvature, 1000)
 
         # filter large curvature difference between two lane
         if left_curv > 5 * right_curv or right_curv > 5 * left_curv:
-            abandon_best_fit = True
+            abandon_last_used_fit = True
 
-        if abandon_best_fit:
+        if abandon_last_used_fit:
             print("FIT: 1 fit")
             left_fit = left_line.best_fit
             right_fit = right_line.best_fit
             self.redetect_cnt += 1
             self.fit_well = 0
             self.distance_queue.append(lane_distance)
-        elif abandon_current_fit:
+        elif abandon_line_current_fit:
             print("FIT: 2 fit")
             if True or left_line.detected:
                 left_fit = self.left_fit
@@ -545,7 +539,7 @@ class Lane():
 
     def fit_smoothing(self, left_line, right_line):
         try:
-            left_fit, right_fit = self.valid_both_lanes(left_line, right_line)
+            left_fit, right_fit = self.verify_both_lanes(left_line, right_line)
         except:
             left_fit = self.left_fit
             right_fit = self.right_fit

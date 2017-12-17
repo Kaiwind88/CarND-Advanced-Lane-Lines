@@ -150,7 +150,7 @@ class Line():
             y = 720
             fit = self.best_fit
             x_pos = fit[0] * y ** 2 + fit[1] * y + fit[2]
-            self.line_base_pos = (x_pos - 630)  * xm_per_pix
+            self.line_base_pos = (x_pos - 640)  * xm_per_pix
             return self.line_base_pos
         except TypeError:
             return None
