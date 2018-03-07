@@ -59,7 +59,7 @@ class Line():
             self.bestx = np.mean(x_values, axis=0, dtype=np.float32)
             print("bestx: {:>.2f}".format(self.bestx))
             return self.bestx
-        except ValueError:
+        except:
             return None
 
     def cal_best_fit(self):
